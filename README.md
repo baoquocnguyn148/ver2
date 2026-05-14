@@ -222,9 +222,12 @@ Các output chính:
 | `outputs/time_series_stationarity.csv` | Kiểm định tính dừng ADF cho level, log, sai phân và seasonal differencing. |
 | `outputs/time_series_seasonality.csv` | Seasonal index theo quý cho doanh thu và lợi nhuận. |
 | `outputs/churn_model_metrics.csv` | Chỉ số train/validation churn model. |
+| `outputs/churn_model_comparison.csv` | So sánh thuật toán churn bằng rolling backtest theo snapshot. |
+| `outputs/churn_backtest.csv` | Chi tiết kết quả che dữ liệu cho từng snapshot và từng thuật toán churn. |
 | `outputs/churn_confusion_matrix.csv` | Confusion matrix của churn model. |
 | `outputs/churn_predictions_snapshot_2020Q1.csv` | Dự báo churn theo khách hàng tại snapshot 2020-Q1. |
 | `outputs/churn_feature_importance.csv` | Feature importance của churn model. |
+| `outputs/reports/churn_customer_action_list.xlsx` | File Excel danh sách khách hàng ưu tiên cho CSKH/CRM, gồm risk segment, xác suất churn, giá trị rủi ro và hành động khuyến nghị. |
 | `outputs/reports/modular_ml_report.xlsx` | Báo cáo Excel tổng hợp. |
 
 ## 9. Dự Báo Doanh Thu Và Lợi Nhuận Theo Time Series
@@ -458,11 +461,17 @@ Target:
 Y_Churn_Next_2Q = 1 nếu khách hàng không phát sinh giao dịch trong 2 quý tiếp theo
 ```
 
-Mô hình sử dụng:
+Các thuật toán được so sánh bằng rolling backtest theo snapshot:
 
 ```text
-LogisticRegressionGD
+Logistic_Balanced
+Logistic_StrongL2
+Logistic_Unweighted
+XGBoost_Balanced
+XGBoost_Regularized
 ```
+
+Champion model được chọn là `XGBoost_Regularized`. Model được chọn theo `macro_f1` và `balanced_accuracy`, đồng thời phải đạt điều kiện tối thiểu về cả recall của lớp churn và specificity của lớp không churn. Cách chọn này tránh trường hợp model chỉ dự đoán gần như toàn bộ khách hàng là churn.
 
 Feature chính:
 
@@ -488,20 +497,39 @@ Feature chính:
 
 | Chỉ số | Giá trị |
 |---|---:|
-| Model | LogisticRegressionGD |
-| Train rows | 146,361 |
+| Model | XGBoost_Regularized |
+| Train rows | 279,542 |
 | Validation rows | 58,440 |
-| Train churn rate | 98.86% |
+| Train churn rate | 98.93% |
 | Validation churn rate | 94.64% |
-| Accuracy | 70.03% |
-| Precision | 94.91% |
-| Recall | 72.20% |
-| F1-score | 82.01% |
-| ROC-AUC | 53.18% |
-| Lift@Top10% | 1.01 |
-| Brier score | 0.2410 |
+| Operating threshold | 0.4631 |
+| Accuracy | 70.09% |
+| Precision | 94.93% |
+| Recall churn | 72.26% |
+| Specificity no churn | 31.76% |
+| F1-score churn | 82.06% |
+| F1-score no churn | 10.21% |
+| Macro F1 | 46.14% |
+| Balanced accuracy | 52.01% |
+| ROC-AUC | 52.01% |
+| Lift@Top10% | 1.00 |
+| Brier score | 0.2203 |
 
-### 10.3 Confusion Matrix
+### 10.3 Kết Quả So Sánh Thuật Toán Churn
+
+Pipeline che dữ liệu theo từng snapshot lịch sử, train trên các snapshot trước đó và validate trên snapshot bị che. Các snapshot validation chính là `12`, `13`, `14`, `15`, tương ứng với nhiều mốc lịch sử trước snapshot scoring cuối cùng.
+
+| Model | Eligible Champion | Backtests | Macro F1 | Balanced Accuracy | Recall Churn | Specificity No Churn |
+|---|---|---:|---:|---:|---:|---:|
+| XGBoost_Regularized | True | 4 | 44.99% | 62.03% | 73.28% | 50.79% |
+| XGBoost_Balanced | True | 4 | 44.74% | 62.28% | 72.53% | 52.02% |
+| Logistic_Unweighted | False | 4 | 50.36% | 50.45% | 99.41% | 1.49% |
+| Logistic_Balanced | False | 4 | 39.15% | 58.39% | 58.25% | 58.52% |
+| Logistic_StrongL2 | False | 4 | 38.65% | 58.29% | 57.08% | 59.50% |
+
+`Logistic_Unweighted` có macro F1 nhìn bề ngoài cao nhưng bị loại khỏi champion vì specificity chỉ khoảng 1.49%, tức gần như gắn nhãn churn cho toàn bộ khách hàng. Với mục tiêu vận hành cho CSKH, model như vậy không phù hợp vì tạo quá nhiều false positive.
+
+### 10.4 Confusion Matrix
 
 ![Churn Confusion Matrix](docs/images/confusion_matrix.png)
 
@@ -509,34 +537,64 @@ Confusion matrix trên validation set:
 
 | Actual / Prediction | Predicted No Churn | Predicted Churn |
 |---|---:|---:|
-| Actual No Churn | 989 | 2,141 |
-| Actual Churn | 15,375 | 39,935 |
+| Actual No Churn | 994 | 2,136 |
+| Actual Churn | 15,342 | 39,968 |
 
 Diễn giải:
 
-- Mô hình nhận diện đúng 39,935 khách hàng churn.
-- Có 15,375 khách hàng churn bị dự đoán nhầm là không churn.
-- Precision cao cho lớp churn, nhưng recall vẫn còn bỏ sót một phần khách hàng churn.
-- ROC-AUC ở mức 53.18%, cho thấy bài toán churn trong dataset này khó phân tách nếu chỉ dựa trên các feature hiện có.
+- Mô hình nhận diện đúng 39,968 khách hàng churn trong validation set.
+- Mô hình nhận diện đúng 994 khách hàng không churn.
+- False positive còn cao vì dữ liệu cực lệch lớp: validation churn rate đạt 94.64%.
+- ROC-AUC chỉ khoảng 52.01%, cho thấy bài toán churn trong dataset này khó phân tách nếu chỉ dựa trên lịch sử giao dịch theo quý. Vì vậy, output nên dùng như danh sách ưu tiên hành động, không nên hiểu là quyết định tuyệt đối.
 
-### 10.4 Feature Importance
+### 10.5 Output Hành Động Cho CSKH/CRM
 
-Top feature theo độ lớn hệ số:
+Pipeline xuất thêm file:
 
-| Feature | Coefficient | Abs Coefficient |
-|---|---:|---:|
-| CLV | -0.424 | 0.424 |
-| Avg_Gap | 0.093 | 0.093 |
-| Avg_Quantity | 0.061 | 0.061 |
-| Coupon_Diversity | -0.057 | 0.057 |
-| Income_Imputed | -0.046 | 0.046 |
-| Education_Rank | 0.045 | 0.045 |
-| Gender_Male | -0.041 | 0.041 |
-| Recency | -0.041 | 0.041 |
-| Num_Products | -0.041 | 0.041 |
-| Loyalty_Rank | 0.041 | 0.041 |
+```text
+outputs/reports/churn_customer_action_list.xlsx
+```
 
-`CLV` là biến có hệ số lớn nhất trong mô hình. Các biến liên quan đến khoảng cách mua hàng, số lượng trung bình, coupon diversity, thu nhập và loyalty rank cũng đóng vai trò trong scoring.
+File này được thiết kế để chuyển cho đội CSKH/CRM ra quyết định. Các sheet chính:
+
+| Sheet | Nội dung |
+|---|---|
+| `All_Customers` | Toàn bộ khách hàng được scoring tại snapshot `2020-Q1`. |
+| `CSKH_Priority_List` | Nhóm `Critical` và `High Risk`, ưu tiên liên hệ trước. |
+| `Selected_Model_Metrics` | Chỉ số model champion. |
+| `Model_Comparison` | So sánh thuật toán bằng rolling backtest. |
+| `Backtest_Detail` | Chi tiết từng fold che dữ liệu. |
+
+Các cột hỗ trợ ra quyết định gồm:
+
+- `Churn_Probability_Next_2Q`: xác suất khách hàng không mua trong 2 quý tới.
+- `Predicted_Churn`: nhãn dự báo theo threshold vận hành.
+- `Churn_Risk_Segment`: `Critical`, `High Risk`, `Medium Risk`, `Low Risk`, `Healthy`.
+- `Expected_Revenue_At_Risk`: doanh thu lịch sử có rủi ro mất đi, có trọng số theo xác suất churn.
+- `Retention_Priority_Score`: điểm ưu tiên giữ chân, kết hợp xác suất churn và CLV.
+- `Action_Owner`: bộ phận phụ trách hành động.
+- `Recommended_Action`: hành động khuyến nghị.
+- `Action_Reason`: lý do chính để CSKH hiểu vì sao khách hàng được ưu tiên.
+
+Phân bổ risk segment tại snapshot scoring `2020-Q1`:
+
+| Segment | Số khách hàng |
+|---|---:|
+| Critical | 13,719 |
+| High Risk | 31,643 |
+| Medium Risk | 14,133 |
+| Low Risk | 2,631 |
+| Healthy | 1,102 |
+
+### 10.6 Feature Importance
+
+Top feature theo gain importance của `XGBoost_Regularized` được lưu tại:
+
+```text
+outputs/churn_feature_importance.csv
+```
+
+Feature importance được dùng để giải thích tương đối những tín hiệu model sử dụng khi scoring. Do dữ liệu chỉ có độ chi tiết theo quý và churn rate rất lệch lớp, phần giải thích nên được dùng như định hướng phân tích, không thay thế việc kiểm chứng bằng chiến dịch giữ chân thực tế.
 
 ## 11. Data Validation
 

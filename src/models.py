@@ -135,15 +135,26 @@ def binary_metrics(y_true, y_score, threshold=0.5):
 
     precision = tp / max(tp + fp, 1)
     recall = tp / max(tp + fn, 1)
+    specificity = tn / max(tn + fp, 1)
+    npv = tn / max(tn + fn, 1)
     f1 = 2 * precision * recall / max(precision + recall, 1e-12)
+    f1_no_churn = 2 * npv * specificity / max(npv + specificity, 1e-12)
+    balanced_accuracy = (recall + specificity) / 2
+    macro_f1 = (f1 + f1_no_churn) / 2
     accuracy = (tp + tn) / max(len(y_true), 1)
     brier = float(np.mean((y_score - y_true) ** 2))
     return {
         "accuracy": accuracy,
         "precision": precision,
         "recall": recall,
+        "specificity": specificity,
+        "npv": npv,
         "f1": f1,
+        "f1_no_churn": f1_no_churn,
+        "balanced_accuracy": balanced_accuracy,
+        "macro_f1": macro_f1,
         "brier": brier,
+        "threshold": threshold,
         "tp": tp,
         "tn": tn,
         "fp": fp,
@@ -175,4 +186,3 @@ def auc_roc(y_true, y_score):
     pos_ranks = ranks[y_true == 1].sum()
     auc = (pos_ranks - len(pos) * (len(pos) + 1) / 2) / (len(pos) * len(neg))
     return float(auc)
-

@@ -28,6 +28,8 @@ def _write_excel_report(
     churn_validation,
     churn_customers,
     churn_importance,
+    churn_model_comparison,
+    churn_backtest,
 ):
     report_path = REPORT_DIR / "modular_ml_report.xlsx"
     with pd.ExcelWriter(report_path, engine="openpyxl") as writer:
@@ -42,6 +44,20 @@ def _write_excel_report(
         churn_validation.to_excel(writer, sheet_name="Churn_Validation_Scores", index=False)
         churn_customers.head(5000).to_excel(writer, sheet_name="Churn_Top_Customers", index=False)
         churn_importance.to_excel(writer, sheet_name="Churn_Feature_Importance", index=False)
+        churn_model_comparison.to_excel(writer, sheet_name="Churn_Model_Compare", index=False)
+        churn_backtest.to_excel(writer, sheet_name="Churn_Backtest", index=False)
+    return report_path
+
+
+def _write_churn_action_report(churn_customers, churn_model_comparison, churn_backtest, churn_metrics):
+    report_path = REPORT_DIR / "churn_customer_action_list.xlsx"
+    high_risk = churn_customers[churn_customers["Churn_Risk_Segment"].isin(["Critical", "High Risk"])]
+    with pd.ExcelWriter(report_path, engine="openpyxl") as writer:
+        churn_customers.to_excel(writer, sheet_name="All_Customers", index=False)
+        high_risk.to_excel(writer, sheet_name="CSKH_Priority_List", index=False)
+        churn_metrics.to_excel(writer, sheet_name="Selected_Model_Metrics", index=False)
+        churn_model_comparison.to_excel(writer, sheet_name="Model_Comparison", index=False)
+        churn_backtest.to_excel(writer, sheet_name="Backtest_Detail", index=False)
     return report_path
 
 
@@ -83,22 +99,38 @@ def main():
     print(f"      Saved: {forecast_path}")
 
     print("[3/4] Training leakage-free churn model...")
-    churn_model, churn_metrics, confusion_matrix, churn_validation, churn_customers, churn_importance = train_churn_model(
-        fact, customers
-    )
+    (
+        churn_model,
+        churn_metrics,
+        confusion_matrix,
+        churn_validation,
+        churn_customers,
+        churn_importance,
+        churn_model_comparison,
+        churn_backtest,
+    ) = train_churn_model(fact, customers)
     churn_metrics_path = OUTPUT_DIR / "churn_model_metrics.csv"
+    churn_model_comparison_path = OUTPUT_DIR / "churn_model_comparison.csv"
+    churn_backtest_path = OUTPUT_DIR / "churn_backtest.csv"
     confusion_matrix_path = OUTPUT_DIR / "churn_confusion_matrix.csv"
     confusion_matrix_img_path = OUTPUT_DIR.parent / "docs" / "images" / "confusion_matrix.png"
     churn_validation_path = OUTPUT_DIR / "churn_validation_scores.csv"
     churn_customers_path = OUTPUT_DIR / "churn_predictions_snapshot_2020Q1.csv"
     churn_importance_path = OUTPUT_DIR / "churn_feature_importance.csv"
     churn_metrics.to_csv(churn_metrics_path, index=False, encoding="utf-8-sig")
+    churn_model_comparison.to_csv(churn_model_comparison_path, index=False, encoding="utf-8-sig")
+    churn_backtest.to_csv(churn_backtest_path, index=False, encoding="utf-8-sig")
     confusion_matrix.to_csv(confusion_matrix_path, encoding="utf-8-sig")
     churn_validation.to_csv(churn_validation_path, index=False, encoding="utf-8-sig")
     churn_customers.to_csv(churn_customers_path, index=False, encoding="utf-8-sig")
     churn_importance.to_csv(churn_importance_path, index=False, encoding="utf-8-sig")
+    churn_action_report_path = _write_churn_action_report(
+        churn_customers, churn_model_comparison, churn_backtest, churn_metrics
+    )
     save_confusion_matrix_png(confusion_matrix, confusion_matrix_img_path)
-    with open(MODEL_DIR / "churn_logistic_gd.pkl", "wb") as f:
+    model_name = str(churn_metrics["model"].iloc[0]).lower().replace(" ", "_")
+    churn_model_path = MODEL_DIR / f"churn_{model_name}.pkl"
+    with open(churn_model_path, "wb") as f:
         pickle.dump(churn_model, f)
     print("      Confusion matrix (validation):")
     print(confusion_matrix.to_string())
@@ -117,6 +149,8 @@ def main():
         churn_validation,
         churn_customers,
         churn_importance,
+        churn_model_comparison,
+        churn_backtest,
     )
     print(f"      Saved: {report_path}")
 
@@ -124,7 +158,9 @@ def main():
     print("Key outputs:")
     print(f"  - {forecast_path}")
     print(f"  - {churn_customers_path}")
+    print(f"  - {churn_action_report_path}")
     print(f"  - {churn_metrics_path}")
+    print(f"  - {churn_model_comparison_path}")
     print(f"  - {confusion_matrix_img_path}")
     print(f"  - {report_path}")
 

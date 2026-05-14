@@ -182,12 +182,18 @@ def build_churn_snapshot(fact, customers, snapshot_idx, horizon=2, scoring_only=
 
     demo_cols = [
         "Customer_ID",
+        "Full_Name",
         "Gender",
+        "Education",
         "Education_Rank",
         "Income",
+        "Income_Bucket",
         "Months_As_Member",
+        "Tenure_Bucket",
+        "LoyaltyStatus",
         "Loyalty_Rank",
         "CLV",
+        "CLV_Segment",
     ]
     features = features.merge(customers[demo_cols], on="Customer_ID", how="left")
     median_income = customers.loc[customers["Income"] > 0, "Income"].median()
@@ -226,4 +232,3 @@ def recommended_action(segment):
         "High Risk": "Lien he ca nhan hoa, uu dai manh kem survey ly do giam mua.",
         "Critical": "Tai kich hoat chi phi thap hoac dua vao nhom theo doi rieng.",
     }[segment]
-
