@@ -1,0 +1,12 @@
+.python_packages/
+__pycache__/
+*.py[cod]
+*$py.class
+
+outputs/models/
+outputs/reports/
+train_final.csv
+~$*.xlsx
+
+.DS_Store
+Thumbs.db
