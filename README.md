@@ -19,7 +19,7 @@ Các insight chính dành cho business stakeholder:
 | Product strategy | `TV and Video Gaming` và `Computers and Home Office` đóng góp khoảng 80.2% tổng doanh thu. | Bảo vệ tồn kho, campaign và forecast demand cho hai nhóm này; đồng thời giảm rủi ro tập trung bằng cách phát triển nhóm sản phẩm còn lại. |
 | Seasonality | Q4 và Q1 là mùa cao điểm rõ ràng; Q2 và Q3 là giai đoạn thấp điểm. | Chuẩn bị inventory, paid media và staffing trước Q4/Q1; dùng Q2/Q3 cho retention, clearance và coupon test. |
 | Customer strategy | `Bronze` tạo doanh thu cao nhất và revenue/customer cao hơn nhiều tier cao hơn. | Tạo nhóm `High-Value Bronze`, audit rule phân hạng loyalty và upsell lên Silver/Gold. |
-| 2020-Q1 anomaly | Revenue tăng 70.4% dù orders giảm 73.5%; tăng trưởng đến từ AOV/product mix, không phải volume. | Kiểm tra unit price, order type, channel và product mix trước khi xem đây là tăng trưởng bền vững. |
+| 2020-Q1 anomaly | Revenue tăng 70.4% dù orders giảm 73.5%; tăng trưởng đến từ AOV/product mix, không phải volume. `Computers and Home Office` tăng lên 75.3% revenue quý. | Kiểm tra bulk orders, order type, channel và product mix trước khi xem đây là tăng trưởng bền vững. |
 | Retention | Churn risk model có ROC-AUC khoảng 52.0%, phù hợp làm danh sách ưu tiên hơn là quyết định tuyệt đối. | Chạy retention theo top-N `Expected_Revenue_At_Risk`, đo contact rate, conversion và retained revenue. |
 
 ## 1.2 AWS Cloud Data Lakehouse Module
@@ -342,6 +342,8 @@ Key findings trước khi đi vào drill-down:
 | AOV tăng từ $1.66K lên $10.65K. | Cần kiểm tra high-ticket orders, thay đổi giá, B2B/order type hoặc product mix. |
 | Không có khách hàng mới trong `2020-Q1` theo first-purchase definition. | Acquisition pipeline có thể bị đứt, hoặc dataset `2020-Q1` bị giới hạn cohort. |
 | `Computers and Home Office` tăng revenue 310.7% dù orders giảm 73.1%. | Đây là driver chính kéo revenue `2020-Q1`, cần kiểm chứng tính bền vững. |
+| Unit price bình quân không tăng tương ứng với AOV. | AOV tăng chủ yếu do quantity/order và product mix, không phải do tăng giá bán đơn vị trên toàn hệ thống. |
+| Top 500 giao dịch chiếm khoảng 74.9% revenue `2020-Q1`. | Revenue quý này có mức độ tập trung cao, giống bulk-order/B2B behavior hơn là retail volume bình thường. |
 | Canada và `Photography` có mức giảm customers sâu nhất trong các nhóm đang so sánh. | Đây là hai điểm cần theo dõi nếu doanh nghiệp muốn phục hồi volume/customer base. |
 
 | Chỉ số | 2019-Q1 | 2020-Q1 | Thay đổi |
@@ -352,6 +354,17 @@ Key findings trước khi đi vào drill-down:
 | Unique customers | 5,295 | 2,813 | -46.9% |
 
 Insight chính: `2020-Q1` tăng doanh thu không đến từ volume. Ngược lại, số đơn hàng và số khách hàng đều giảm mạnh. Revenue tăng do AOV tăng đột biến, nghĩa là doanh thu được kéo lên bởi một lượng nhỏ đơn hàng có giá trị rất cao hoặc do mix sản phẩm chuyển mạnh sang nhóm ticket size lớn.
+
+Điều tra thêm cho thấy AOV tăng không phải vì giá bán đơn vị toàn hệ thống tăng mạnh:
+
+| Chỉ số | 2019-Q1 | 2020-Q1 | Diễn giải |
+|---|---:|---:|---|
+| Weighted unit price | $561 | $694 | Tăng khoảng 23.6%, thấp hơn rất nhiều so với mức tăng AOV 541.7%. |
+| Quantity/order toàn quý | 2.96 | 15.35 | Driver chính làm AOV tăng. |
+| `Computers and Home Office` quantity/order | 2.96 | 46.22 | Dấu hiệu bulk orders hoặc đơn hàng quy mô lớn. |
+| `Computers and Home Office` revenue share | 31.2% | 75.3% | Product mix chuyển rất mạnh sang nhóm ticket size cao. |
+
+Vì dataset không có `Channel`, `Store_ID`, `Order_Type`, `Promotion_Cost` hoặc event calendar, chưa thể xác nhận đây là launch sản phẩm mới, campaign lớn, mở thị trường mới hay nhu cầu B2B/work-from-home. Bằng chứng hiện có nghiêng nhiều về **structural break do bulk-order/product-mix shift**, không phải seasonal growth thuần túy.
 
 Drill-down theo new/returning customer:
 
@@ -642,9 +655,34 @@ Kết quả backtest cho `Profit` với model được chọn `SeasonalGrowth`:
 | 2019-Q4 | $3.84M | $3.83M | -$0.01M | $0.01M | 0.29% | 0.29% |
 | 2020-Q1 | $4.50M | $3.13M | -$1.37M | $1.37M | 30.53% | 36.03% |
 
-Nhìn vào bảng che dữ liệu, model dự báo khá tốt trong bốn quý của năm 2019, nhưng bị under-forecast ở `2020-Q1`. Điều này cho thấy `2020-Q1` là quý tăng trưởng bất thường so với pattern lịch sử, làm sai số holdout tăng mạnh.
+Nhìn vào bảng che dữ liệu, model dự báo khá tốt trong bốn quý của năm 2019, nhưng bị under-forecast ở `2020-Q1`. Actual revenue đạt $30.02M trong khi forecast chỉ đạt $20.86M, tức model thấp hơn thực tế khoảng $9.17M. Đây không chỉ là "quý tăng trưởng bất thường"; đây là dấu hiệu structural break cần điều tra nguyên nhân.
 
-### 9.7 Kết Quả Dự Báo
+### 9.7 Điều Tra Structural Break Ở 2020-Q1
+
+Root-cause analysis cho sai số `2020-Q1`:
+
+| Kiểm tra | Kết quả | Nhận định |
+|---|---:|---|
+| Revenue YoY | +70.4% | Doanh thu tăng mạnh so với `2019-Q1`. |
+| Orders YoY | -73.5% | Tăng trưởng không đến từ số lượng đơn hàng. |
+| AOV YoY | +541.7% | AOV là biến làm revenue tăng. |
+| Weighted unit price | $561 -> $694 | Giá bán đơn vị chỉ tăng khoảng 23.6%, không đủ giải thích toàn bộ AOV spike. |
+| Quantity/order | 2.96 -> 15.35 | Số lượng sản phẩm trên mỗi đơn tăng mạnh. |
+| `Computers and Home Office` revenue share | 31.2% -> 75.3% | Product mix chuyển mạnh sang nhóm giá trị cao. |
+| `Computers and Home Office` quantity/order | 2.96 -> 46.22 | Có dấu hiệu bulk orders hoặc đơn hàng B2B/quy mô lớn. |
+| Top 500 transactions share | 74.9% revenue `2020-Q1` | Doanh thu tập trung vào một nhóm giao dịch lớn, không giống retail volume bình thường. |
+
+Kết luận DA: `2020-Q1` nhiều khả năng là regime shift do product mix và bulk-order behavior, đặc biệt ở `Computers and Home Office`. Với dữ liệu hiện có, chưa thể xác nhận nguyên nhân ngoài dữ liệu như launch sản phẩm mới, promotion lớn, mở kênh bán hàng, mở thị trường mới hoặc tác động work-from-home. Để kết luận chắc hơn cần bổ sung `Order_Type`, `Channel`, `Store_ID`, campaign calendar, discount/promotion cost và dữ liệu tháng/ngày.
+
+Hàm ý cho forecasting:
+
+1. Seasonal baseline vẫn hữu ích cho các quý bình thường, nhưng không đủ để bắt structural break/event-driven demand.
+2. Không nên dùng forecast sau `2020-Q1` như single-point forecast tuyệt đối nếu chưa xác minh regime mới có bền vững hay không.
+3. Nên bổ sung biến ngoại sinh hoặc event flags: product launch, promotion, channel, store closure/opening, B2B order flag, market event.
+4. Với dữ liệu đủ dài hơn, cân nhắc mô hình có khả năng xử lý changepoint/regime shift như SARIMAX/ARIMAX với exogenous variables, state-space model có intervention dummy, Prophet/changepoint model, hoặc forecast phân cấp theo product line rồi aggregate.
+5. Trong bối cảnh hiện tại, nên trình bày forecast theo scenario: baseline seasonal, high-AOV regime continuation, và mean-reversion sau anomaly.
+
+### 9.8 Kết Quả Dự Báo
 
 | Quý | Predicted Revenue | Revenue CI Lower | Revenue CI Upper | Predicted Profit | Profit CI Lower | Profit CI Upper |
 |---|---:|---:|---:|---:|---:|---:|
