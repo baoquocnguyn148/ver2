@@ -20,32 +20,43 @@ https://main.dkb6koqkmw7iv.amplifyapp.com
 
 Kiến trúc cloud hiện tại:
 
-```text
-GitHub / Local Runner / GitHub Actions
-  -> Python pipeline
-      -> đọc raw Excel từ S3
-      -> build star schema data model
-      -> ghi curated Parquet lên S3
-      -> train forecast và churn models
-      -> upload CSV, Excel report, model, image outputs lên S3
+```mermaid
+graph TD
+    %% Define Styles
+    classDef aws fill:#FF9900,stroke:#232F3E,stroke-width:2px,color:#232F3E;
+    classDef git fill:#2088FF,stroke:#FFFFFF,stroke-width:2px,color:#FFFFFF;
+    classDef process fill:#3b82f6,stroke:#FFFFFF,stroke-width:2px,color:#FFFFFF;
+    classDef bi fill:#F2C811,stroke:#000000,stroke-width:2px,color:#000000;
 
-S3 Data Lake
-  raw/DB.xlsx
-  curated/fact_sales/
-  curated/dim_customer/
-  curated/dim_product/
-  curated/dim_date/
-  outputs/
+    subgraph "CI/CD & Orchestration"
+        GH[GitHub Repository] -->|Push/Cron| GHA[GitHub Actions]
+        GHA -->|Build & Run| Docker[Docker Container]
+        GHA -->|Provision| IaC[Terraform IaC]
+        class GH,GHA git;
+    end
 
-Glue Data Catalog
-  -> external tables trên curated Parquet
+    subgraph "AWS Data Lakehouse (Serverless)"
+        Docker -->|1. Upload Raw| S3_Raw[(S3: raw/)]
+        S3_Raw -->|2. Process & Clean| Python[Python/Pandas]
+        Python -->|3. Export Parquet| S3_Curated[(S3: curated/)]
+        Python -->|4. Export ML Results| S3_Out[(S3: outputs/)]
+        
+        S3_Curated -.->|Schema Inference| Glue[AWS Glue Data Catalog]
+        Glue -.->|Metadata/Schema| Athena[Amazon Athena]
+        S3_Curated ---|SQL Queries| Athena
+        
+        class S3_Raw,S3_Curated,S3_Out,Glue,Athena aws;
+        class Python process;
+    end
 
-Athena
-  -> SQL validation queries
-  -> demo views cho portfolio
-
-Amplify Hosting
-  -> static portfolio website
+    subgraph "Presentation & BI Layer"
+        Athena -->|ODBC/DirectQuery| PBI[Power BI Dashboard]
+        GHA -->|Deploy UI| Amplify[AWS Amplify Hosting]
+        PBI -.->|Embed| Amplify
+        
+        class PBI bi;
+        class Amplify aws;
+    end
 ```
 
 Cloud module trong repo:
