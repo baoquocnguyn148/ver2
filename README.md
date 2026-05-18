@@ -73,6 +73,18 @@ s3://ver2-retail-analytics/
     athena/
 ```
 
+Cloud evidence screenshots:
+
+| Evidence | Screenshot |
+|---|---|
+| S3 data lake root | ![S3 bucket root](docs/images/cloud/s3-bucket-root.png) |
+| S3 curated Parquet layer | ![S3 curated layer](docs/images/cloud/s3-curated-layer.png) |
+| Glue Data Catalog tables | ![Glue catalog tables](docs/images/cloud/glue-catalog-tables.png) |
+| Athena sales view query | ![Athena sales by product](docs/images/cloud/athena-sales-by-product.png) |
+| GitHub Actions CI success | ![GitHub Actions success](docs/images/cloud/github-actions-success.png) |
+| Amplify public deploy | ![Amplify deploy success](docs/images/cloud/amplify-deploy-success.png) |
+| AWS Budget guardrail | ![AWS Budget guardrail](docs/images/cloud/aws-budget-guardrail.png) |
+
 Cloud run:
 
 ```powershell

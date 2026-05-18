@@ -228,6 +228,43 @@
       width: 100%;
       height: auto;
     }
+
+    .evidence-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 24px;
+    }
+
+    .evidence-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+    }
+
+    .evidence-card img {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
+      object-position: top left;
+      display: block;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .evidence-card div {
+      padding: 20px;
+    }
+
+    .evidence-card h3 {
+      font-size: 1.15rem;
+      margin-bottom: 8px;
+    }
+
+    .evidence-card p {
+      color: #94a3b8;
+      font-size: 0.92rem;
+    }
     
     /* Tech Stack */
     .tech-stack {
@@ -398,6 +435,7 @@
     @media (max-width: 768px) {
       .hero h1 { font-size: 2.5rem; }
       .ml-grid { grid-template-columns: 1fr; }
+      .evidence-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -468,6 +506,66 @@
           <h3>Outputs</h3>
           <p>Machine Learning forecasts, churn predictions, and automated reports.</p>
         </div>
+      </div>
+    </section>
+
+    <!-- AWS Evidence Section -->
+    <section class="container">
+      <div class="section-header">
+        <h2>AWS Pipeline Evidence</h2>
+        <p>Operational proof that the portfolio runs as a real cloud data lakehouse, not only as local analysis code.</p>
+      </div>
+
+      <div class="evidence-grid">
+        <article class="evidence-card">
+          <img src="docs/images/cloud/s3-bucket-root.png" alt="S3 data lake bucket root with raw, curated, and outputs prefixes">
+          <div>
+            <h3>S3 Data Lake</h3>
+            <p>Bucket layout with raw, curated, and output zones for reproducible pipeline runs.</p>
+          </div>
+        </article>
+        <article class="evidence-card">
+          <img src="docs/images/cloud/s3-curated-layer.png" alt="S3 curated layer with fact and dimension datasets">
+          <div>
+            <h3>Curated Parquet</h3>
+            <p>Fact and dimension datasets published for Glue and Athena consumption.</p>
+          </div>
+        </article>
+        <article class="evidence-card">
+          <img src="docs/images/cloud/glue-catalog-tables.png" alt="Glue Data Catalog database with retail analytics tables and views">
+          <div>
+            <h3>Glue Catalog</h3>
+            <p>External tables and Athena views registered in the retail analytics database.</p>
+          </div>
+        </article>
+        <article class="evidence-card">
+          <img src="docs/images/cloud/athena-sales-by-product.png" alt="Athena query result for sales by product">
+          <div>
+            <h3>Athena SQL</h3>
+            <p>Validated SQL view over the cataloged retail analytics tables.</p>
+          </div>
+        </article>
+        <article class="evidence-card">
+          <img src="docs/images/cloud/github-actions-success.png" alt="Successful GitHub Actions workflow runs">
+          <div>
+            <h3>GitHub Actions</h3>
+            <p>Automated CI checks and cloud workflow history on the main branch.</p>
+          </div>
+        </article>
+        <article class="evidence-card">
+          <img src="docs/images/cloud/amplify-deploy-success.png" alt="AWS Amplify deployed application">
+          <div>
+            <h3>Amplify Hosting</h3>
+            <p>Public static portfolio deployed through AWS Amplify.</p>
+          </div>
+        </article>
+        <article class="evidence-card">
+          <img src="docs/images/cloud/aws-budget-guardrail.png" alt="AWS Budget guardrail healthy status">
+          <div>
+            <h3>Cost Guardrail</h3>
+            <p>Budget monitoring in place to keep the demo Free Tier friendly.</p>
+          </div>
+        </article>
       </div>
     </section>
 

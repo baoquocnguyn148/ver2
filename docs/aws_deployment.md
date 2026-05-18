@@ -63,6 +63,18 @@ Demo views:
 - `sales_by_loyalty`
 - `churn_priority_customers`
 
+## Cloud Evidence
+
+| Evidence | Screenshot |
+|---|---|
+| S3 data lake root | ![S3 bucket root](images/cloud/s3-bucket-root.png) |
+| S3 curated Parquet layer | ![S3 curated layer](images/cloud/s3-curated-layer.png) |
+| Glue Data Catalog tables | ![Glue catalog tables](images/cloud/glue-catalog-tables.png) |
+| Athena sales view query | ![Athena sales by product](images/cloud/athena-sales-by-product.png) |
+| GitHub Actions CI success | ![GitHub Actions success](images/cloud/github-actions-success.png) |
+| Amplify public deploy | ![Amplify deploy success](images/cloud/amplify-deploy-success.png) |
+| AWS Budget guardrail | ![AWS Budget guardrail](images/cloud/aws-budget-guardrail.png) |
+
 ## GitHub Actions
 
 Required repository secrets:
