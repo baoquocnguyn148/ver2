@@ -94,33 +94,34 @@
   <rect x="946" y="118" width="292" height="472" class="group"/>
   <text x="970" y="152" class="group-title">QUERY &amp; PRESENTATION</text>
 
-  <rect x="976" y="184" width="232" height="88" class="node query"/>
-  <text x="1000" y="216" class="box-title">Glue Data Catalog</text>
-  <text x="1000" y="242" class="box-text">External tables over S3</text>
-  <text x="1000" y="260" class="box-text">curated Parquet partitions.</text>
+  <rect x="976" y="160" width="232" height="76" class="node query"/>
+  <text x="1000" y="186" class="box-title">Glue Data Catalog</text>
+  <text x="1000" y="210" class="box-text">External tables over S3</text>
+  <text x="1000" y="226" class="box-text">curated Parquet partitions.</text>
 
-  <rect x="976" y="326" width="232" height="106" class="node query"/>
-  <text x="1000" y="358" class="box-title">Amazon Athena</text>
-  <text x="1000" y="384" class="box-text">SQL views: product, quarter,</text>
-  <text x="1000" y="402" class="box-text">loyalty, churn priority.</text>
-  <text x="1000" y="420" class="box-text">Workgroup controls output.</text>
+  <rect x="976" y="266" width="232" height="96" class="node query"/>
+  <text x="1000" y="292" class="box-title">Amazon Athena</text>
+  <text x="1000" y="316" class="box-text">SQL views: product, quarter,</text>
+  <text x="1000" y="332" class="box-text">loyalty, churn priority.</text>
+  <text x="1000" y="348" class="box-text">Workgroup controls output.</text>
 
-  <rect x="976" y="486" width="232" height="72" class="node present"/>
-  <text x="1000" y="516" class="box-title">Amplify Portfolio</text>
-  <text x="1000" y="542" class="box-text">Public site with dashboard</text>
-  <text x="1000" y="560" class="box-text">images and ML results.</text>
+  <rect x="976" y="392" width="232" height="72" class="node present"/>
+  <text x="1000" y="418" class="box-title">Power BI</text>
+  <text x="1000" y="442" class="box-text">Sales, product, customer</text>
+  <text x="1000" y="456" class="box-text">dashboards via ODBC.</text>
 
-  <rect x="340" y="622" width="212" height="64" class="node present"/>
-  <text x="364" y="650" class="box-title">Power BI</text>
-  <text x="364" y="674" class="box-text">Sales, product, customer dashboards.</text>
+  <rect x="976" y="494" width="232" height="72" class="node present"/>
+  <text x="1000" y="520" class="box-title">Amplify Portfolio</text>
+  <text x="1000" y="544" class="box-text">Public site with dashboard</text>
+  <text x="1000" y="558" class="box-text">images and ML results.</text>
 
-  <rect x="616" y="622" width="212" height="64" class="node guard"/>
-  <text x="640" y="650" class="box-title">Cost Guardrails</text>
-  <text x="640" y="674" class="box-text">Budget, Parquet scans, short logs.</text>
+  <rect x="340" y="622" width="212" height="64" class="node guard"/>
+  <text x="364" y="650" class="box-title">Cost Guardrails</text>
+  <text x="364" y="674" class="box-text">Budget, Parquet scans, short logs.</text>
 
-  <rect x="894" y="622" width="314" height="64" class="node future"/>
-  <text x="918" y="650" class="box-title">Advanced optional</text>
-  <text x="918" y="674" class="box-text">EventBridge -> Step Functions -> Lambda.</text>
+  <rect x="616" y="622" width="314" height="64" class="node future"/>
+  <text x="640" y="650" class="box-title">Advanced optional</text>
+  <text x="640" y="674" class="box-text">EventBridge -> Step Functions -> Lambda.</text>
 
   <path class="flow" d="M173 262 L173 312"/>
   <path class="flow" d="M278 358 C310 358 326 255 370 255"/>
@@ -129,10 +130,14 @@
   <path class="flow" d="M550 428 C590 428 604 214 646 214"/>
   <path class="flow" d="M646 214 C606 214 594 364 646 364"/>
   <path class="flow-orange" d="M550 428 C590 428 604 520 646 520"/>
-  <path class="flow" d="M878 364 C914 364 930 228 976 228"/>
-  <path class="flow" d="M1092 272 L1092 326"/>
-  <path class="flow-orange" d="M878 520 C924 520 932 522 976 522"/>
-  <path class="flow-orange" d="M1092 432 L1092 486"/>
+  
+  <path class="flow" d="M878 364 C914 364 930 198 976 198"/>
+  <path class="flow-orange" d="M878 520 C924 520 932 530 976 530"/>
+  
+  <path class="flow" d="M1092 236 L1092 266"/>
+  <path class="flow" d="M1092 362 L1092 392"/>
+  <path class="flow-soft" d="M1092 464 L1092 494"/>
+
   <rect x="54" y="622" width="220" height="64" rx="14" fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.4"/>
   <text x="78" y="650" class="box-title">Validated AWS</text>
   <text x="78" y="674" class="box-text">ap-southeast-2 | 84,436 fact rows.</text>

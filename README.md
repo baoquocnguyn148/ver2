@@ -20,7 +20,7 @@ https://main.dkb6koqkmw7iv.amplifyapp.com
 
 Kiến trúc cloud hiện tại:
 
-![AWS Data Lakehouse Architecture](docs/images/aws_architecture_diagram.png)
+![AWS Data Lakehouse Architecture](docs/images/aws_architecture_diagram.svg)
 
 Cloud module trong repo:
 
