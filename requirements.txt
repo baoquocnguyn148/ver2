@@ -1,6 +1,9 @@
 pandas
 numpy
 openpyxl
+pyarrow
+python-dotenv
+awswrangler
 pillow
 scipy
 statsmodels

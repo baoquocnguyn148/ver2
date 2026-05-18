@@ -2,18 +2,37 @@ import pickle
 
 import pandas as pd
 
+from src import config
 from src.config import MODEL_DIR, OUTPUT_DIR, REPORT_DIR
 from src.data_loading import add_quarter_index, load_model_tables
 from src.data_validation import validate_model_tables
 from src.train_churn import train_churn_model
 from src.train_forecast import forecast_revenue_profit
+from src.utils.io_utils import DataIO
 from src.visualization import save_confusion_matrix_png
 
 
 def _ensure_dirs():
-    OUTPUT_DIR.mkdir(exist_ok=True)
-    MODEL_DIR.mkdir(exist_ok=True)
-    REPORT_DIR.mkdir(exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    MODEL_DIR.mkdir(parents=True, exist_ok=True)
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _upload_outputs_to_s3(paths):
+    """Upload generated ML artifacts when the pipeline runs in S3 mode."""
+    if config.LOCAL_MODE:
+        return []
+
+    io = DataIO()
+    uploaded = []
+    output_prefix = config.OUTPUT_PREFIX.strip("/")
+    for path in paths:
+        try:
+            relative_key = path.relative_to(config.OUTPUT_DIR).as_posix()
+        except ValueError:
+            relative_key = f"images/{path.name}"
+        uploaded.append(io.upload_file(path, f"{output_prefix}/{relative_key}"))
+    return uploaded
 
 
 def _write_excel_report(
@@ -154,6 +173,29 @@ def main():
     )
     print(f"      Saved: {report_path}")
 
+    uploaded_outputs = _upload_outputs_to_s3(
+        [
+            validation_path,
+            forecast_path,
+            model_compare_path,
+            backtest_path,
+            selected_backtest_path,
+            diagnostics_path,
+            seasonality_path,
+            churn_metrics_path,
+            churn_model_comparison_path,
+            churn_backtest_path,
+            confusion_matrix_path,
+            churn_validation_path,
+            churn_customers_path,
+            churn_importance_path,
+            churn_action_report_path,
+            churn_model_path,
+            confusion_matrix_img_path,
+            report_path,
+        ]
+    )
+
     print("\nPipeline complete.")
     print("Key outputs:")
     print(f"  - {forecast_path}")
@@ -163,6 +205,10 @@ def main():
     print(f"  - {churn_model_comparison_path}")
     print(f"  - {confusion_matrix_img_path}")
     print(f"  - {report_path}")
+    if uploaded_outputs:
+        print("Uploaded S3 outputs:")
+        for path in uploaded_outputs:
+            print(f"  - {path}")
 
 
 if __name__ == "__main__":

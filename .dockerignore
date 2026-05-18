@@ -1,0 +1,14 @@
+.git/
+.github/
+.venv/
+.python_packages/
+__pycache__/
+*.pyc
+.env
+DB.xlsx
+data_model.xlsx
+report_dashboard.pbix
+train_final.csv
+outputs/models/
+outputs/reports/
+~$*.xlsx

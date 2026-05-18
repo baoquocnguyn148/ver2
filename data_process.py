@@ -21,11 +21,15 @@ from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
+from src import config
+from src.utils.io_utils import DataIO
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 0. CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
-INPUT_FILE  = "DB.xlsx"
-OUTPUT_FILE = "data_model.xlsx"
+io = DataIO()
+INPUT_FILE  = config.RAW_KEY if not config.LOCAL_MODE else "DB.xlsx"
+OUTPUT_FILE = config.DATA_MODEL_FILE
 SHEET_NAME  = "FILE_DATA_HANDONLAB2"
 
 # Loyalty tier thứ tự từ thấp → cao (dùng để tạo rank)
@@ -52,7 +56,7 @@ print("=" * 65)
 # 1. LOAD RAW DATA
 # ─────────────────────────────────────────────────────────────────────────────
 print("\n[1/7] Loading raw data ...")
-raw = pd.read_excel(INPUT_FILE, sheet_name=SHEET_NAME)
+raw = io.read_raw_excel(sheet_name=SHEET_NAME)
 print(f"      Loaded: {raw.shape[0]:,} rows × {raw.shape[1]} columns")
 
 
@@ -446,6 +450,26 @@ sheet_map = {
     "AGG_Coupon":        agg_coupon,
 }
 
+print("      Exporting curated Parquet tables ...")
+fact_sales_curated = fact_sales.copy()
+fact_sales_curated["partition_year"] = fact_sales_curated["Year"].astype(str)
+
+dim_customer_curated = dim_customer.copy()
+dim_customer_curated["partition_loyalty_status"] = dim_customer_curated["LoyaltyStatus"].astype(str)
+
+dim_date_curated = dim_date.copy()
+dim_date_curated["partition_year"] = dim_date_curated["Year"].astype(str)
+
+curated_tables = {
+    "fact_sales": (fact_sales_curated, ["partition_year"]),
+    "dim_customer": (dim_customer_curated, ["partition_loyalty_status"]),
+    "dim_product": (dim_product, []),
+    "dim_date": (dim_date_curated, ["partition_year"]),
+}
+for table_name, (table_df, partition_cols) in curated_tables.items():
+    location = io.save_parquet(table_name, table_df, partition_cols=partition_cols)
+    print(f"      Curated: {table_name:<14} -> {location}")
+
 with pd.ExcelWriter(OUTPUT_FILE, engine="openpyxl") as writer:
     for sheet_name, data in sheet_map.items():
         data.to_excel(writer, sheet_name=sheet_name, index=False)
@@ -519,6 +543,10 @@ for sn, color in TAB_COLORS.items():
     wb[sn].sheet_properties.tabColor = color
 
 wb.save(OUTPUT_FILE)
+excel_output_location = str(OUTPUT_FILE)
+if not config.LOCAL_MODE:
+    output_key = f"{config.OUTPUT_PREFIX.strip('/')}/data_model.xlsx"
+    excel_output_location = io.upload_file(OUTPUT_FILE, output_key)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DONE — Print summary
@@ -526,7 +554,7 @@ wb.save(OUTPUT_FILE)
 print("\n" + "=" * 65)
 print("  ✅  PIPELINE COMPLETE")
 print("=" * 65)
-print(f"  Output : {OUTPUT_FILE}")
+print(f"  Output : {excel_output_location}")
 print(f"\n  Sheets exported:")
 for name, data in sheet_map.items():
     print(f"    {'●':1} {name:<25} {len(data):>7,} rows  ×  {data.shape[1]:>2} cols")
