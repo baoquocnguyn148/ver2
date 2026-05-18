@@ -7,6 +7,11 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# System fonts for visualization.py (confusion matrix PNG rendering)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt

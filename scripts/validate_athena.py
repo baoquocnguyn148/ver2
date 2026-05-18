@@ -12,16 +12,30 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src import config
 
+MAX_WAIT_SECONDS = 120
+DB = config.ATHENA_DATABASE
 
 QUERIES = {
-    "fact_sales": "SELECT count(*) FROM retail_analytics.fact_sales",
-    "dim_customer": "SELECT count(*) FROM retail_analytics.dim_customer",
-    "dim_product": "SELECT count(*) FROM retail_analytics.dim_product",
-    "dim_date": "SELECT count(*) FROM retail_analytics.dim_date",
-    "sales_by_product": (
-        "SELECT product_line, total_revenue "
-        "FROM retail_analytics.sales_by_product "
-        "ORDER BY total_revenue DESC LIMIT 5"
+    "fact_sales": f"SELECT count(*) AS rows FROM {DB}.fact_sales",
+    "dim_customer": f"SELECT count(*) AS rows FROM {DB}.dim_customer",
+    "dim_product": f"SELECT count(*) AS rows FROM {DB}.dim_product",
+    "dim_date": f"SELECT count(*) AS rows FROM {DB}.dim_date",
+    "dim_geography": f"SELECT count(*) AS rows FROM {DB}.dim_geography",
+    "v_sales_by_product": (
+        f"SELECT product_line, total_revenue FROM {DB}.sales_by_product "
+        "ORDER BY total_revenue DESC LIMIT 3"
+    ),
+    "v_sales_by_quarter": (
+        f"SELECT year_quarter, total_revenue FROM {DB}.sales_by_quarter "
+        "ORDER BY year_quarter DESC LIMIT 3"
+    ),
+    "v_sales_by_loyalty": (
+        f"SELECT loyaltystatus, loyalty_rank, total_revenue, unique_customers "
+        f"FROM {DB}.sales_by_loyalty ORDER BY loyalty_rank"
+    ),
+    "v_churn_priority": (
+        f"SELECT retention_priority, count(*) AS customers FROM {DB}.churn_priority_customers "
+        "GROUP BY retention_priority ORDER BY customers DESC"
     ),
 }
 
@@ -31,31 +45,44 @@ def _run_query(client, query: str):
         QueryString=query,
         QueryExecutionContext={"Database": config.ATHENA_DATABASE},
         ResultConfiguration={"OutputLocation": config.ATHENA_OUTPUT},
+        WorkGroup=config.ATHENA_WORKGROUP,
     )
     query_id = response["QueryExecutionId"]
+    start = time.time()
     while True:
+        if time.time() - start > MAX_WAIT_SECONDS:
+            raise TimeoutError(f"Query {query_id} exceeded {MAX_WAIT_SECONDS}s")
         status = client.get_query_execution(QueryExecutionId=query_id)["QueryExecution"]["Status"]
         state = status["State"]
         if state in {"SUCCEEDED", "FAILED", "CANCELLED"}:
             if state != "SUCCEEDED":
                 reason = status.get("StateChangeReason", "")
-                raise RuntimeError(f"Athena query {query_id} {state}: {reason}")
+                raise RuntimeError(f"Athena {state}: {reason}")
             return client.get_query_results(QueryExecutionId=query_id)["ResultSet"]["Rows"]
         time.sleep(1)
 
 
 def main() -> None:
     client = boto3.client("athena")
-    print(f"Validating Athena database: {config.ATHENA_DATABASE}")
+    print(f"Validating Athena: {config.ATHENA_DATABASE} (workgroup: {config.ATHENA_WORKGROUP})")
+    print()
+    passed = 0
     for name, query in QUERIES.items():
-        rows = _run_query(client, query)
-        values = [
-            " | ".join(cell.get("VarCharValue", "") for cell in row["Data"])
-            for row in rows[1:]
-        ]
-        print(f"[{name}]")
-        for value in values:
-            print(f"  {value}")
+        try:
+            rows = _run_query(client, query)
+            values = [
+                " | ".join(cell.get("VarCharValue", "") for cell in row["Data"])
+                for row in rows[1:]
+            ]
+            tag = "TABLE" if name.startswith("dim") or name == "fact_sales" else "VIEW"
+            print(f"  OK {tag:<5} {name}")
+            for value in values:
+                print(f"      {value}")
+            passed += 1
+        except Exception as exc:
+            print(f"  FAIL {name}: {exc}")
+    print()
+    print(f"Validation complete: {passed}/{len(QUERIES)} checks passed")
 
 
 if __name__ == "__main__":

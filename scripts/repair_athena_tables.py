@@ -12,21 +12,28 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src import config
 
+MAX_WAIT_SECONDS = 300
 
-TABLES = ["fact_sales", "dim_customer", "dim_product", "dim_date"]
+TABLES = ["fact_sales", "dim_customer", "dim_product", "dim_date", "dim_geography"]
 
 
-def run_query(client, query: str) -> str:
+def _run_query(client, query: str) -> str:
     response = client.start_query_execution(
         QueryString=query,
         QueryExecutionContext={"Database": config.ATHENA_DATABASE},
         ResultConfiguration={"OutputLocation": config.ATHENA_OUTPUT},
+        WorkGroup=config.ATHENA_WORKGROUP,
     )
     return response["QueryExecutionId"]
 
 
-def wait_for_query(client, query_id: str) -> None:
+def _wait_for_query(client, query_id: str) -> None:
+    start = time.time()
     while True:
+        if time.time() - start > MAX_WAIT_SECONDS:
+            raise TimeoutError(
+                f"Athena query {query_id} exceeded {MAX_WAIT_SECONDS}s timeout"
+            )
         response = client.get_query_execution(QueryExecutionId=query_id)
         status = response["QueryExecution"]["Status"]["State"]
         if status in {"SUCCEEDED", "FAILED", "CANCELLED"}:
@@ -39,14 +46,14 @@ def wait_for_query(client, query_id: str) -> None:
 
 def main() -> None:
     client = boto3.client("athena")
-    print(f"Repairing Athena partitions in database: {config.ATHENA_DATABASE}")
-    print(f"Athena query results: {config.ATHENA_OUTPUT}")
+    print(f"Repairing Athena partitions in: {config.ATHENA_DATABASE} (workgroup: {config.ATHENA_WORKGROUP})")
+    print(f"Query results: {config.ATHENA_OUTPUT}")
 
     for table in TABLES:
         query = f"MSCK REPAIR TABLE {table}"
-        print(f"Running: {query}")
-        query_id = run_query(client, query)
-        wait_for_query(client, query_id)
+        print(f"  Running: {query}")
+        query_id = _run_query(client, query)
+        _wait_for_query(client, query_id)
         print(f"  OK: {table}")
 
 

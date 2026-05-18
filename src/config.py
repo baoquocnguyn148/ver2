@@ -25,6 +25,10 @@ RAW_KEY = os.getenv("RAW_KEY", "raw/DB.xlsx")
 CURATED_PREFIX = os.getenv("CURATED_PREFIX", "curated/")
 OUTPUT_PREFIX = os.getenv("OUTPUT_PREFIX", "outputs/")
 ATHENA_DATABASE = os.getenv("ATHENA_DATABASE", "retail_analytics")
+ATHENA_WORKGROUP = os.getenv(
+    "ATHENA_WORKGROUP",
+    f"{ATHENA_DATABASE}_workgroup",
+)
 ATHENA_OUTPUT = os.getenv(
     "ATHENA_OUTPUT",
     f"s3://{S3_BUCKET}/{OUTPUT_PREFIX.strip('/')}/athena/",

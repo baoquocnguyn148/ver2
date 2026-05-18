@@ -2,16 +2,7 @@
 
 ## Current Architecture
 
-```mermaid
-flowchart LR
-  GH["GitHub / Local Runner"] --> PY["Python Pipeline"]
-  PY --> RAW["S3 raw/DB.xlsx"]
-  PY --> CUR["S3 curated Parquet"]
-  PY --> OUT["S3 outputs"]
-  CUR --> GLUE["Glue Data Catalog"]
-  GLUE --> ATHENA["Athena Views"]
-  OUT --> SITE["Amplify Static Portfolio"]
-```
+![AWS Data Lakehouse Architecture](images/aws_architecture_diagram.png)
 
 ## Environment
 
@@ -24,6 +15,7 @@ RAW_KEY=raw/DB.xlsx
 CURATED_PREFIX=curated/
 OUTPUT_PREFIX=outputs/
 ATHENA_DATABASE=retail_analytics
+ATHENA_WORKGROUP=retail_analytics_workgroup
 ATHENA_OUTPUT=s3://ver2-retail-analytics/outputs/athena/
 AWS_DEFAULT_REGION=ap-southeast-2
 WORK_DIR=/tmp/ver2
@@ -62,11 +54,13 @@ These counts were validated after writing curated Parquet to S3:
 | `dim_customer` | 63,228 |
 | `dim_product` | 5 |
 | `dim_date` | 17 |
+| `dim_geography` | 221 |
 
 Demo views:
 
 - `sales_by_product`
 - `sales_by_quarter`
+- `sales_by_loyalty`
 - `churn_priority_customers`
 
 ## GitHub Actions

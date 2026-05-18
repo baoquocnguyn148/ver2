@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" role="img" aria-labelledby="title desc">
+  <title id="title">Retail Sales Analytics AWS Data Lakehouse Architecture</title>
+  <desc id="desc">Architecture diagram showing GitHub Actions running the Python and Docker pipeline, reading raw Excel from S3, writing curated Parquet and ML outputs, registering Glue tables, querying through Athena, and publishing a portfolio site through Amplify.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="58%" stop-color="#111827"/>
+      <stop offset="100%" stop-color="#1f2937"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.98"/>
+      <stop offset="100%" stop-color="#f8fafc" stop-opacity="0.94"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#020617" flood-opacity="0.28"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#38bdf8"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="12" markerHeight="12" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#f59e0b"/>
+    </marker>
+    <style>
+      .title { font: 800 34px Arial, sans-serif; fill: #ffffff; }
+      .subtitle { font: 400 16px Arial, sans-serif; fill: #cbd5e1; }
+      .lane-title { font: 700 13px Arial, sans-serif; letter-spacing: 1.2px; fill: #93c5fd; }
+      .box-title { font: 700 18px Arial, sans-serif; fill: #0f172a; }
+      .box-text { font: 400 13px Arial, sans-serif; fill: #475569; }
+      .tiny { font: 600 11px Arial, sans-serif; fill: #64748b; }
+      .chip { font: 700 12px Arial, sans-serif; fill: #0f172a; }
+      .white-title { font: 700 17px Arial, sans-serif; fill: #ffffff; }
+      .white-text { font: 400 12px Arial, sans-serif; fill: #e2e8f0; }
+      .box { fill: url(#card); stroke: #dbeafe; stroke-width: 1.4; filter: url(#shadow); }
+      .storage { fill: #eff6ff; stroke: #60a5fa; }
+      .catalog { fill: #ecfdf5; stroke: #34d399; }
+      .output { fill: #fff7ed; stroke: #fb923c; }
+      .future { fill: #1e293b; stroke: #64748b; stroke-dasharray: 7 6; }
+      .flow { fill: none; stroke: #38bdf8; stroke-width: 3; marker-end: url(#arrow); }
+      .flow-orange { fill: none; stroke: #f59e0b; stroke-width: 3; marker-end: url(#arrow-orange); }
+      .flow-dashed { fill: none; stroke: #94a3b8; stroke-width: 2.5; stroke-dasharray: 8 7; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1280" height="760" rx="28" fill="url(#bg)"/>
+  <circle cx="160" cy="80" r="150" fill="#2563eb" opacity="0.16"/>
+  <circle cx="1120" cy="650" r="190" fill="#f59e0b" opacity="0.05"/>
+
+  <text x="56" y="66" class="title">Retail Sales Analytics AWS Data Lakehouse</text>
+  <text x="56" y="96" class="subtitle">Free Tier friendly portfolio architecture in ap-southeast-2: S3, Glue, Athena, GitHub Actions, Docker, Power BI, and Amplify.</text>
+
+  <rect x="56" y="126" width="1168" height="72" rx="18" fill="#0b1220" stroke="#334155"/>
+  <text x="82" y="156" class="white-title">Current production path</text>
+  <text x="82" y="180" class="white-text">GitHub Actions or local runner executes the same Python pipeline, reads S3 raw/DB.xlsx, writes curated Parquet and ML artifacts, then refreshes Glue/Athena.</text>
+  <text x="936" y="156" class="white-title">Advanced optional</text>
+  <text x="936" y="180" class="white-text">EventBridge to Step Functions to Lambda Container.</text>
+
+  <text x="72" y="238" class="lane-title">SOURCE AND AUTOMATION</text>
+  <rect x="56" y="254" width="220" height="112" rx="16" class="box"/>
+  <text x="82" y="290" class="box-title">GitHub Repository</text>
+  <text x="82" y="316" class="box-text">Code, README, site, Terraform,</text>
+  <text x="82" y="336" class="box-text">and workflow definitions.</text>
+  <rect x="86" y="348" width="82" height="22" rx="11" fill="#dbeafe"/>
+  <text x="104" y="363" class="chip">main</text>
+
+  <rect x="56" y="416" width="220" height="124" rx="16" class="box"/>
+  <text x="82" y="452" class="box-title">GitHub Actions</text>
+  <text x="82" y="478" class="box-text">Manual or weekly cloud run.</text>
+  <text x="82" y="498" class="box-text">Runs tests, pipeline, Glue</text>
+  <text x="82" y="518" class="box-text">registration, Athena validation.</text>
+
+  <text x="354" y="238" class="lane-title">PROCESSING</text>
+  <rect x="328" y="254" width="230" height="128" rx="16" class="box"/>
+  <text x="354" y="290" class="box-title">Python Pipeline</text>
+  <text x="354" y="316" class="box-text">data_process.py</text>
+  <text x="354" y="336" class="box-text">ml_pipeline.py</text>
+  <text x="354" y="356" class="box-text">run_cloud_pipeline.py</text>
+
+  <rect x="328" y="424" width="230" height="116" rx="16" class="box"/>
+  <text x="354" y="460" class="box-title">Docker Image</text>
+  <text x="354" y="486" class="box-text">Reproducible runtime for</text>
+  <text x="354" y="506" class="box-text">portfolio and future Lambda.</text>
+
+  <text x="640" y="238" class="lane-title">S3 DATA LAKE</text>
+  <rect x="608" y="254" width="236" height="88" rx="16" class="box storage"/>
+  <text x="634" y="290" class="box-title">raw/</text>
+  <text x="634" y="316" class="box-text">DB.xlsx original source file.</text>
+
+  <rect x="608" y="374" width="236" height="116" rx="16" class="box storage"/>
+  <text x="634" y="410" class="box-title">curated/</text>
+  <text x="634" y="436" class="box-text">fact_sales, dim_customer,</text>
+  <text x="634" y="456" class="box-text">dim_product, dim_date,</text>
+  <text x="634" y="476" class="box-text">dim_geography as Parquet.</text>
+
+  <rect x="608" y="522" width="236" height="106" rx="16" class="box output"/>
+  <text x="634" y="558" class="box-title">outputs/</text>
+  <text x="634" y="584" class="box-text">Forecast, churn, Excel report,</text>
+  <text x="634" y="604" class="box-text">model files, images, Athena logs.</text>
+
+  <text x="914" y="238" class="lane-title">CATALOG AND SQL</text>
+  <rect x="896" y="292" width="226" height="104" rx="16" class="box catalog"/>
+  <text x="922" y="328" class="box-title">Glue Data Catalog</text>
+  <text x="922" y="354" class="box-text">External tables over curated</text>
+  <text x="922" y="374" class="box-text">Parquet partitions.</text>
+
+  <rect x="896" y="448" width="226" height="116" rx="16" class="box catalog"/>
+  <text x="922" y="484" class="box-title">Amazon Athena</text>
+  <text x="922" y="510" class="box-text">SQL tables and demo views:</text>
+  <text x="922" y="530" class="box-text">sales, quarterly revenue,</text>
+  <text x="922" y="550" class="box-text">loyalty, churn priority.</text>
+
+  <text x="72" y="632" class="lane-title">PRESENTATION AND GOVERNANCE</text>
+  <rect x="56" y="648" width="268" height="72" rx="16" class="box output"/>
+  <text x="82" y="680" class="box-title">Power BI Dashboards</text>
+  <text x="82" y="704" class="box-text">Sales, product, and customer screenshots.</text>
+
+  <rect x="374" y="648" width="268" height="72" rx="16" class="box output"/>
+  <text x="400" y="680" class="box-title">AWS Amplify Portfolio</text>
+  <text x="400" y="704" class="box-text">Public static website with ML outputs.</text>
+
+  <rect x="692" y="648" width="244" height="72" rx="16" class="box"/>
+  <text x="718" y="680" class="box-title">Cost Guardrails</text>
+  <text x="718" y="704" class="box-text">AWS Budget, short logs, Parquet scans.</text>
+
+  <rect x="984" y="648" width="238" height="72" rx="16" class="future"/>
+  <text x="1010" y="680" class="white-title">Future Orchestration</text>
+  <text x="1010" y="704" class="white-text">EventBridge, Step Functions, Lambda.</text>
+
+  <path class="flow" d="M276 310 C300 310 304 310 328 310"/>
+  <path class="flow" d="M166 366 C166 392 166 392 166 416"/>
+  <path class="flow" d="M276 478 C300 478 304 486 328 486"/>
+  <path class="flow" d="M558 318 C580 318 586 298 608 298"/>
+  <path class="flow" d="M726 342 C726 360 726 360 726 374"/>
+  <path class="flow" d="M558 318 C582 318 584 432 608 432"/>
+  <path class="flow-orange" d="M558 486 C584 486 584 575 608 575"/>
+  <path class="flow" d="M844 432 C872 432 872 344 896 344"/>
+  <path class="flow" d="M1009 396 C1009 424 1009 424 1009 448"/>
+  <path class="flow-orange" d="M844 575 C874 575 874 506 896 506"/>
+  <path class="flow-orange" d="M1009 564 C1009 610 516 610 516 648"/>
+  <path class="flow-orange" d="M190 648 C190 618 516 618 516 648"/>
+  <path class="flow-dashed" d="M1103 648 C1103 614 1103 600 1103 564"/>
+</svg>

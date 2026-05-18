@@ -4,6 +4,7 @@ openpyxl
 pyarrow
 python-dotenv
 awswrangler
+boto3
 pillow
 scipy
 statsmodels

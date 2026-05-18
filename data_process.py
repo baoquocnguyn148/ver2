@@ -460,11 +460,15 @@ dim_customer_curated["partition_loyalty_status"] = dim_customer_curated["Loyalty
 dim_date_curated = dim_date.copy()
 dim_date_curated["partition_year"] = dim_date_curated["Year"].astype(str)
 
+dim_geo_curated = dim_geo.copy()
+dim_geo_curated["partition_country"] = dim_geo_curated["Country"].astype(str)
+
 curated_tables = {
-    "fact_sales": (fact_sales_curated, ["partition_year"]),
-    "dim_customer": (dim_customer_curated, ["partition_loyalty_status"]),
-    "dim_product": (dim_product, []),
-    "dim_date": (dim_date_curated, ["partition_year"]),
+    "fact_sales":     (fact_sales_curated,    ["partition_year"]),
+    "dim_customer":   (dim_customer_curated,  ["partition_loyalty_status"]),
+    "dim_product":    (dim_product,           []),
+    "dim_date":       (dim_date_curated,      ["partition_year"]),
+    "dim_geography":  (dim_geo_curated,       ["partition_country"]),
 }
 for table_name, (table_df, partition_cols) in curated_tables.items():
     location = io.save_parquet(table_name, table_df, partition_cols=partition_cols)

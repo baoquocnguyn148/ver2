@@ -20,44 +20,7 @@ https://main.dkb6koqkmw7iv.amplifyapp.com
 
 Kiến trúc cloud hiện tại:
 
-```mermaid
-graph TD
-    %% Define Styles
-    classDef aws fill:#FF9900,stroke:#232F3E,stroke-width:2px,color:#232F3E;
-    classDef git fill:#2088FF,stroke:#FFFFFF,stroke-width:2px,color:#FFFFFF;
-    classDef process fill:#3b82f6,stroke:#FFFFFF,stroke-width:2px,color:#FFFFFF;
-    classDef bi fill:#F2C811,stroke:#000000,stroke-width:2px,color:#000000;
-
-    subgraph "CI/CD & Orchestration"
-        GH[GitHub Repository] -->|Push/Cron| GHA[GitHub Actions]
-        GHA -->|Build & Run| Docker[Docker Container]
-        GHA -->|Provision| IaC[Terraform IaC]
-        class GH,GHA git;
-    end
-
-    subgraph "AWS Data Lakehouse (Serverless)"
-        Docker -->|1. Upload Raw| S3_Raw[(S3: raw/)]
-        S3_Raw -->|2. Process & Clean| Python[Python/Pandas]
-        Python -->|3. Export Parquet| S3_Curated[(S3: curated/)]
-        Python -->|4. Export ML Results| S3_Out[(S3: outputs/)]
-        
-        S3_Curated -.->|Schema Inference| Glue[AWS Glue Data Catalog]
-        Glue -.->|Metadata/Schema| Athena[Amazon Athena]
-        S3_Curated ---|SQL Queries| Athena
-        
-        class S3_Raw,S3_Curated,S3_Out,Glue,Athena aws;
-        class Python process;
-    end
-
-    subgraph "Presentation & BI Layer"
-        Athena -->|ODBC/DirectQuery| PBI[Power BI Dashboard]
-        GHA -->|Deploy UI| Amplify[AWS Amplify Hosting]
-        PBI -.->|Embed| Amplify
-        
-        class PBI bi;
-        class Amplify aws;
-    end
-```
+![AWS Data Lakehouse Architecture](docs/images/aws_architecture_diagram.png)
 
 Cloud module trong repo:
 
@@ -81,11 +44,13 @@ Kết quả đã validate trên AWS region `ap-southeast-2`:
 | `dim_customer` | 63,228 |
 | `dim_product` | 5 |
 | `dim_date` | 17 |
+| `dim_geography` | 221 |
 
 Athena views đã tạo:
 
 - `sales_by_product`
 - `sales_by_quarter`
+- `sales_by_loyalty`
 - `churn_priority_customers`
 
 Data lake layout:
@@ -99,6 +64,7 @@ s3://ver2-retail-analytics/
     dim_customer/partition_loyalty_status=.../*.parquet
     dim_product/*.parquet
     dim_date/partition_year=YYYY/*.parquet
+    dim_geography/partition_country=.../*.parquet
   outputs/
     forecast and churn CSVs
     reports/*.xlsx

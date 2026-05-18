@@ -18,6 +18,7 @@ jobs:
       CURATED_PREFIX: "curated/"
       OUTPUT_PREFIX: "outputs/"
       ATHENA_DATABASE: "retail_analytics"
+      ATHENA_WORKGROUP: "retail_analytics_workgroup"
       ATHENA_OUTPUT: "s3://ver2-retail-analytics/outputs/athena/"
       WORK_DIR: "/tmp/ver2"
       PYTHONIOENCODING: "utf-8"
@@ -46,3 +47,9 @@ jobs:
 
       - name: Run cloud pipeline
         run: python scripts/run_cloud_pipeline.py
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Cloud pipeline failed on $(date -u)"
+          echo "Logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

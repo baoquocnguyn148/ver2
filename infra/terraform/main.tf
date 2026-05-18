@@ -84,7 +84,9 @@ resource "aws_iam_policy" "pipeline_policy" {
           "athena:StartQueryExecution",
           "athena:GetQueryExecution",
           "athena:GetQueryResults",
+          "athena:GetWorkGroup",
           "athena:ListQueryExecutions",
+          "athena:ListWorkGroups",
           "athena:StopQueryExecution"
         ]
         Resource = "*"

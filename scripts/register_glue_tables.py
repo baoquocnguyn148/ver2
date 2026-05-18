@@ -29,6 +29,10 @@ TABLES = {
         "path": f"s3://{config.S3_BUCKET}/{config.CURATED_PREFIX.strip('/')}/dim_date/",
         "partition_cols": ["partition_year"],
     },
+    "dim_geography": {
+        "path": f"s3://{config.S3_BUCKET}/{config.CURATED_PREFIX.strip('/')}/dim_geography/",
+        "partition_cols": ["partition_country"],
+    },
 }
 
 
@@ -45,17 +49,28 @@ def _athena_type(dtype) -> str:
     return "string"
 
 
+def _sample_schema(path: str):
+    """Read a small Parquet chunk to infer dtypes without loading the full dataset."""
+    chunks = wr.s3.read_parquet(path=path, dataset=True, chunked=500)
+    try:
+        return next(chunks)
+    except StopIteration:
+        import pandas as pd
+
+        return pd.DataFrame()
+
+
 def main() -> None:
     print(f"Registering Glue tables in database: {config.ATHENA_DATABASE}")
     for table_name, spec in TABLES.items():
-        df = wr.s3.read_parquet(path=spec["path"], dataset=True, path_suffix=".parquet")
+        sample = _sample_schema(spec["path"])
         partition_cols = set(spec["partition_cols"])
         columns_types = {
-            column: _athena_type(dtype)
-            for column, dtype in df.dtypes.items()
-            if column not in partition_cols
+            col: _athena_type(dtype)
+            for col, dtype in sample.dtypes.items()
+            if col not in partition_cols
         }
-        partitions_types = {column: "string" for column in partition_cols}
+        partitions_types = {col: "string" for col in partition_cols}
         wr.catalog.create_parquet_table(
             database=config.ATHENA_DATABASE,
             table=table_name,
@@ -65,8 +80,8 @@ def main() -> None:
             mode="overwrite",
         )
         print(
-            f"  OK: {table_name} "
-            f"({len(columns_types)} columns, {len(partitions_types)} partitions)"
+            f"  OK: {table_name:<16} "
+            f"({len(columns_types)} columns, {len(partitions_types)} partition(s))"
         )
 
 

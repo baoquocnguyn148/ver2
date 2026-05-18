@@ -213,6 +213,21 @@
       color: #94a3b8;
       font-size: 0.95rem;
     }
+
+    .architecture-diagram {
+      margin: 0 auto 40px;
+      border: 1px solid var(--glass-border);
+      border-radius: 18px;
+      overflow: hidden;
+      background: rgba(15, 23, 42, 0.72);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    }
+
+    .architecture-diagram img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
     
     /* Tech Stack */
     .tech-stack {
@@ -427,6 +442,10 @@
         <h2>AWS Data Lakehouse Design</h2>
         <p>A highly scalable, automated pipeline prioritizing AWS Free Tier while delivering enterprise-grade performance.</p>
       </div>
+
+      <figure class="architecture-diagram">
+        <img src="docs/images/aws_architecture_diagram.png" alt="Retail Sales Analytics AWS Data Lakehouse architecture diagram">
+      </figure>
       
       <div class="arch-grid">
         <div class="arch-card">
