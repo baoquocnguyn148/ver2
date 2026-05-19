@@ -33,6 +33,14 @@ QUERIES = {
         f"SELECT loyaltystatus, loyalty_rank, total_revenue, unique_customers "
         f"FROM {DB}.sales_by_loyalty ORDER BY loyalty_rank"
     ),
+    "v_customer_value": (
+        f"SELECT customer_id, total_revenue FROM {DB}.customer_value "
+        "ORDER BY total_revenue DESC LIMIT 3"
+    ),
+    "v_retention_priority": (
+        f"SELECT retention_priority, count(*) AS customers FROM {DB}.retention_priority "
+        "GROUP BY retention_priority ORDER BY customers DESC"
+    ),
     "v_churn_priority": (
         f"SELECT retention_priority, count(*) AS customers FROM {DB}.churn_priority_customers "
         "GROUP BY retention_priority ORDER BY customers DESC"

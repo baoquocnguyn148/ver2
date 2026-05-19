@@ -1,0 +1,13 @@
+version: 2
+
+sources:
+  - name: retail_analytics
+    database: AwsDataCatalog
+    schema: retail_analytics
+    tables:
+      - name: fact_sales
+      - name: dim_customer
+      - name: dim_product
+      - name: dim_date
+      - name: dim_geography
+

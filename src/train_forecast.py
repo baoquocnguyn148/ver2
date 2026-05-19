@@ -256,15 +256,27 @@ def _fit_final_model(qdf, target_col, selected):
     return _fit_sarima(y, order, seasonal_order)
 
 
-def _forecast_selected(qdf, target_col, selected, model):
-    horizon = len(FORECAST_HORIZON)
+def _build_forecast_horizon(qdf, periods=None):
+    periods = periods or len(FORECAST_HORIZON)
+    last = qdf.sort_values("Quarter_Idx").iloc[-1]
+    last_period = _year_quarter_to_period(last["Year_Quarter"])
+    last_idx = int(last["Quarter_Idx"])
+    return [
+        (f"{period.year}-Q{period.quarter}", last_idx + step, period.quarter)
+        for step in range(1, periods + 1)
+        for period in [last_period + step]
+    ]
+
+
+def _forecast_selected(qdf, target_col, selected, model, forecast_horizon):
+    horizon = len(forecast_horizon)
     if selected["Model"] == "SeasonalNaive":
-        preds = [model.predict_one(qnum) for _, _, qnum in FORECAST_HORIZON]
+        preds = [model.predict_one(qnum) for _, _, qnum in forecast_horizon]
         return np.array(preds), None
     if selected["Model"] == "SeasonalGrowth":
         rolling = qdf.copy()
         preds = []
-        for quarter, idx, qnum in FORECAST_HORIZON:
+        for quarter, idx, qnum in forecast_horizon:
             last_year = rolling.loc[rolling["Quarter_Idx"] == idx - 4, target_col]
             if len(last_year):
                 pred = float(last_year.iloc[0]) * model.avg_yoy_growth_
@@ -291,6 +303,7 @@ def _forecast_selected(qdf, target_col, selected, model):
 
 def forecast_revenue_profit(fact):
     qdf = make_quarterly_series(fact)
+    forecast_horizon = _build_forecast_horizon(qdf)
     diagnostics = []
     seasonality = []
     all_backtests = []
@@ -312,13 +325,13 @@ def forecast_revenue_profit(fact):
 
     forecast_rows = []
     revenue_pred, revenue_conf = _forecast_selected(
-        qdf, "Revenue", selected_models["Revenue"]["selected"], selected_models["Revenue"]["model"]
+        qdf, "Revenue", selected_models["Revenue"]["selected"], selected_models["Revenue"]["model"], forecast_horizon
     )
     profit_pred, profit_conf = _forecast_selected(
-        qdf, "Profit", selected_models["Profit"]["selected"], selected_models["Profit"]["model"]
+        qdf, "Profit", selected_models["Profit"]["selected"], selected_models["Profit"]["model"], forecast_horizon
     )
 
-    for i, (quarter, idx, _) in enumerate(FORECAST_HORIZON):
+    for i, (quarter, idx, _) in enumerate(forecast_horizon):
         rev_band = selected_models["Revenue"]["selected"]["Backtest_MAPE"]
         prof_band = selected_models["Profit"]["selected"]["Backtest_MAPE"]
         rev_lower, rev_upper = (

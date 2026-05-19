@@ -45,9 +45,11 @@ class XGBoostNativeBinary:
         return np.array([score.get(feature, 0.0) for feature in self.feature_names_], dtype=float)
 
 
-def build_training_windows(fact, customers, snapshots=range(8, 16), horizon=2):
+def build_training_windows(fact, customers, snapshots=None, horizon=2):
     frames = []
     max_idx = int(fact["Quarter_Idx"].max())
+    if snapshots is None:
+        snapshots = range(8, max_idx - horizon + 1)
     for snapshot_idx in snapshots:
         if snapshot_idx + horizon > max_idx:
             continue
@@ -187,7 +189,9 @@ def _evaluate_scores(y_true, y_score, threshold):
     return metrics
 
 
-def compare_churn_models(dataset, validation_snapshots=(12, 13, 14, 15)):
+def compare_churn_models(dataset, validation_snapshots=None):
+    if validation_snapshots is None:
+        validation_snapshots = sorted(dataset["Snapshot_Idx"].dropna().unique())[-4:]
     rows = []
     for validation_snapshot in validation_snapshots:
         train = dataset[dataset["Snapshot_Idx"] < validation_snapshot].copy()
@@ -248,7 +252,9 @@ def compare_churn_models(dataset, validation_snapshots=(12, 13, 14, 15)):
     return comparison, backtest
 
 
-def _fit_selected_model(dataset, selected_model_name, validation_snapshot=15):
+def _fit_selected_model(dataset, selected_model_name, validation_snapshot=None):
+    if validation_snapshot is None:
+        validation_snapshot = int(dataset["Snapshot_Idx"].max())
     train = dataset[dataset["Snapshot_Idx"] < validation_snapshot].copy()
     validation = dataset[dataset["Snapshot_Idx"] == validation_snapshot].copy()
     spec = next(spec for spec in _candidate_specs() if spec["name"] == selected_model_name)

@@ -8,6 +8,7 @@ __pycache__/
 outputs/models/
 outputs/reports/
 train_final.csv
+_synthetic_test_run_*/
 ~$*.xlsx
 
 .DS_Store

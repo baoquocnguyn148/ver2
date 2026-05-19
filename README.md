@@ -40,13 +40,72 @@ Cloud module trong repo:
 |---|---|
 | `src/config.py` | Đọc `.env` hoặc environment variables để chuyển Local/S3 mode. |
 | `src/utils/io_utils.py` | Helper đọc Excel local/S3 và ghi CSV, Excel, Parquet, binary artifacts. |
+| `src/etl/` | Helper ETL cho curated partitions và data quality checks. |
 | `scripts/run_cloud_pipeline.py` | Chạy full cloud pipeline end-to-end. |
+| `scripts/run_data_quality.py` | Chạy data quality checks trên star schema và xuất report. |
 | `scripts/register_glue_tables.py` | Đăng ký Glue external tables từ curated Parquet. |
 | `scripts/repair_athena_tables.py` | Chạy `MSCK REPAIR TABLE` để refresh partitions. |
-| `scripts/create_athena_views.py` | Tạo Athena demo views. |
+| `scripts/create_athena_views.py` | Tạo Athena demo views từ SQL files trong `sql/views/`. |
 | `scripts/validate_athena.py` | Validate row count và query mẫu trên Athena. |
+| `sql/views/` | SQL ELT layer cho Athena analytics marts. |
+| `airflow/dags/retail_analytics_dag.py` | Optional Airflow DAG để minh họa orchestration production-style. |
+| `dbt/` | Optional dbt scaffold cho hướng Analytics Engineering trên Athena. |
 | `.github/workflows/pipeline.yml` | GitHub Actions workflow chạy cloud pipeline manual/weekly. |
 | `infra/terraform/` | Terraform scaffold cho S3, Glue, Athena, IAM. |
+
+### 1.3 ETL/ELT Design Decision
+
+Project này dùng mô hình **ETL là chính, ELT là query layer phía sau**.
+
+Lý do chọn thiết kế này:
+
+- Nguồn dữ liệu là file Excel `DB.xlsx`, phù hợp để extract và chuẩn hóa bằng Python trước khi đưa vào data lake.
+- Dataset hiện tại khoảng 84K giao dịch, pandas xử lý hiệu quả hơn việc dựng Spark/ELT thuần chỉ để transform dữ liệu nhỏ.
+- Pipeline cần nhiều business logic ngoài SQL như tạo segmentation, income bucket, CLV segment, date key, fact/dimension tables và feature cho ML.
+- Power BI cần `data_model.xlsx`, trong khi Athena cần curated Parquet. Vì vậy Python ETL giúp tạo cả hai output từ cùng một business logic.
+- Sau khi dữ liệu đã được chuẩn hóa thành curated Parquet, Athena views đóng vai trò ELT/query serving layer để tạo các mart phân tích.
+
+Luồng ETL chính:
+
+```text
+Extract
+  DB.xlsx từ local hoặc s3://ver2-retail-analytics/raw/DB.xlsx
+
+Transform
+  data_process.py
+  - clean column names and values
+  - create business metrics: revenue, cost, profit, margin, AOV
+  - create date keys and segmentation fields
+  - build star schema: fact_sales, dim_customer, dim_product, dim_date, dim_geography
+  - prepare curated partition columns
+  - run data quality checks before downstream ML/query steps
+
+Load
+  - data_model.xlsx for Power BI and ML
+  - curated Parquet tables to S3 curated/
+  - ML/report artifacts to S3 outputs/
+```
+
+Luồng ELT/query layer:
+
+```text
+Load curated Parquet to S3
+  -> Register Glue external tables
+  -> Repair partitions with MSCK REPAIR TABLE
+  -> Build Athena views for analytics consumption
+  -> Validate row counts and demo queries
+```
+
+Các Athena views hiện đóng vai trò analytics marts:
+
+- `sales_by_product`
+- `sales_by_quarter`
+- `sales_by_loyalty`
+- `customer_value`
+- `retention_priority`
+- `churn_priority_customers`
+
+Nếu mở rộng production, hướng nâng cấp hợp lý là giữ ETL cho bước chuẩn hóa/feature engineering, sau đó quản lý SQL ELT layer bằng `sql/views/` hoặc dbt models để có lineage, tests và documentation tốt hơn.
 
 Kết quả đã validate trên AWS region `ap-southeast-2`:
 
@@ -63,6 +122,8 @@ Athena views đã tạo:
 - `sales_by_product`
 - `sales_by_quarter`
 - `sales_by_loyalty`
+- `customer_value`
+- `retention_priority`
 - `churn_priority_customers`
 
 Data lake layout:
@@ -127,6 +188,11 @@ AWS_SECRET_ACCESS_KEY
 | `ml_pipeline.py` | Entrypoint chính để chạy pipeline ML mới. |
 | `run_modular_ml_pipeline.py` | Runner của pipeline ML dạng module. |
 | `src/` | Source code module hóa cho ML pipeline. |
+| `src/etl/` | Helper ETL và data quality checks cho pipeline. |
+| `scripts/run_data_quality.py` | Script kiểm tra chất lượng dữ liệu sau ETL. |
+| `sql/views/` | SQL ELT layer cho Athena views/marts. |
+| `airflow/dags/` | Airflow DAG optional để minh họa orchestration. |
+| `dbt/` | dbt scaffold optional cho Analytics Engineering. |
 | `outputs/` | Toàn bộ output của pipeline ML: forecast, metrics, report, model. |
 | `docs/images/` | Ảnh dashboard và confusion matrix dùng trong README. |
 | `requirements.txt` | Danh sách thư viện Python cần thiết. |
@@ -437,6 +503,7 @@ Các output chính:
 | Output | Nội dung |
 |---|---|
 | `outputs/data_validation_report.csv` | Báo cáo kiểm tra dữ liệu. |
+| `outputs/data_quality_report.csv` | Data quality report cho fact/dim sau ETL, gồm row count, null keys, duplicate keys, orphan keys, negative values và accepted values. |
 | `outputs/forecast_revenue_profit.csv` | Kết quả dự báo doanh thu và lợi nhuận. |
 | `outputs/forecast_model_comparison.csv` | Bảng so sánh mô hình forecast. |
 | `outputs/forecast_backtest.csv` | Backtest rolling-origin. |
@@ -843,9 +910,31 @@ outputs/churn_feature_importance.csv
 
 Feature importance được dùng để giải thích tương đối những tín hiệu model sử dụng khi scoring. Do dữ liệu chỉ có độ chi tiết theo quý và churn rate rất lệch lớp, phần giải thích nên được dùng như định hướng phân tích, không thay thế việc kiểm chứng bằng chiến dịch giữ chân thực tế.
 
-## 11. Data Validation
+## 11. Data Quality & Validation
 
-Trước khi train, pipeline kiểm tra các điều kiện dữ liệu quan trọng:
+Sau ETL, pipeline chạy data quality layer bằng:
+
+```bash
+python scripts/run_data_quality.py
+```
+
+Các check chính:
+
+- `fact_sales` row count > 0.
+- `Customer_ID`, `Product_ID`, `Date_Key` không null trong fact.
+- Không duplicate `Customer_ID` trong `DIM_Customer`.
+- Không orphan customer/product/date/geography keys trong fact.
+- Không negative revenue/profit.
+- Quarter chỉ nhận `Q1`, `Q2`, `Q3`, `Q4`.
+- Dữ liệu năm 2020 có `Is_Full_Year=false` để tránh hiểu nhầm full-year performance.
+
+Báo cáo data quality được lưu tại:
+
+```text
+outputs/data_quality_report.csv
+```
+
+Trước khi train ML, pipeline cũng kiểm tra validation report nhẹ cho các bảng ML input:
 
 - Schema của `FACT_Sales`.
 - Schema của `DIM_Customer`.
@@ -876,10 +965,22 @@ Chạy xử lý dữ liệu:
 python data_process.py
 ```
 
+Chạy data quality checks:
+
+```bash
+python scripts/run_data_quality.py
+```
+
 Chạy pipeline ML:
 
 ```bash
 python ml_pipeline.py
+```
+
+Tạo Athena views từ SQL ELT layer:
+
+```bash
+python scripts/create_athena_views.py
 ```
 
 Chạy smoke test:
@@ -894,6 +995,8 @@ Project đã hoàn thiện một quy trình phân tích dữ liệu end-to-end:
 
 - Dữ liệu thô được làm sạch và chuẩn hóa.
 - Data model được tổ chức theo star schema phục vụ Power BI.
+- Data quality layer kiểm tra fact/dim trước khi chạy downstream ML và Athena.
+- SQL ELT layer tách riêng Athena views thành version-controlled SQL files.
 - Dashboard thể hiện được góc nhìn tổng quan về sales, product và customer.
 - Pipeline ML dự báo được doanh thu và lợi nhuận theo quý.
 - Churn risk module xuất được probability, segment, metrics, confusion matrix và feature importance.

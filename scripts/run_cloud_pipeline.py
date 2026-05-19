@@ -11,6 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 STEPS = [
     ["data_process.py"],
+    ["scripts/run_data_quality.py"],
     ["ml_pipeline.py"],
     ["scripts/register_glue_tables.py"],
     ["scripts/repair_athena_tables.py"],

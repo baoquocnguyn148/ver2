@@ -134,7 +134,13 @@ def main():
     confusion_matrix_path = OUTPUT_DIR / "churn_confusion_matrix.csv"
     confusion_matrix_img_path = OUTPUT_DIR.parent / "docs" / "images" / "confusion_matrix.png"
     churn_validation_path = OUTPUT_DIR / "churn_validation_scores.csv"
-    churn_customers_path = OUTPUT_DIR / "churn_predictions_snapshot_2020Q1.csv"
+    latest_snapshot_idx = int(fact["Quarter_Idx"].max())
+    latest_snapshot_label = (
+        fact.loc[fact["Quarter_Idx"] == latest_snapshot_idx, "Year_Quarter"]
+        .iloc[0]
+        .replace("-", "")
+    )
+    churn_customers_path = OUTPUT_DIR / f"churn_predictions_snapshot_{latest_snapshot_label}.csv"
     churn_importance_path = OUTPUT_DIR / "churn_feature_importance.csv"
     churn_metrics.to_csv(churn_metrics_path, index=False, encoding="utf-8-sig")
     churn_model_comparison.to_csv(churn_model_comparison_path, index=False, encoding="utf-8-sig")

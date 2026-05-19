@@ -22,6 +22,12 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 from src import config
+from src.etl.build_dimensions import (
+    prepare_customer_for_curated,
+    prepare_date_for_curated,
+    prepare_geography_for_curated,
+)
+from src.etl.build_fact import prepare_fact_for_curated
 from src.utils.io_utils import DataIO
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -74,9 +80,13 @@ df.drop(columns=["Column1"], inplace=True)
 df.columns = df.columns.str.strip()
 
 # 2.3 Strip whitespace ở các cột string
-str_cols = df.select_dtypes(include="object").columns
+str_cols = df.columns[df.dtypes.astype(str).isin(["object", "string"])]
 for c in str_cols:
-    df[c] = df[c].str.strip()
+    df[c] = df[c].map(lambda value: value.strip() if isinstance(value, str) else value)
+
+# Customer identifiers can arrive as numeric IDs in the historical workbook and
+# string IDs in newer synthetic/cloud loads. Normalize them before building keys.
+df["Loyalty#"] = df["Loyalty#"].where(df["Loyalty#"].notna(), pd.NA).astype("string").str.strip()
 
 # 2.4 Income = 0 với Education = College → đây là pattern "sinh viên / không thu nhập"
 #     Gắn flag thay vì xóa, để người dùng tự quyết khi filter
@@ -451,17 +461,10 @@ sheet_map = {
 }
 
 print("      Exporting curated Parquet tables ...")
-fact_sales_curated = fact_sales.copy()
-fact_sales_curated["partition_year"] = fact_sales_curated["Year"].astype(str)
-
-dim_customer_curated = dim_customer.copy()
-dim_customer_curated["partition_loyalty_status"] = dim_customer_curated["LoyaltyStatus"].astype(str)
-
-dim_date_curated = dim_date.copy()
-dim_date_curated["partition_year"] = dim_date_curated["Year"].astype(str)
-
-dim_geo_curated = dim_geo.copy()
-dim_geo_curated["partition_country"] = dim_geo_curated["Country"].astype(str)
+fact_sales_curated = prepare_fact_for_curated(fact_sales)
+dim_customer_curated = prepare_customer_for_curated(dim_customer)
+dim_date_curated = prepare_date_for_curated(dim_date)
+dim_geo_curated = prepare_geography_for_curated(dim_geo)
 
 curated_tables = {
     "fact_sales":     (fact_sales_curated,    ["partition_year"]),

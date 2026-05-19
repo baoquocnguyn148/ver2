@@ -38,11 +38,19 @@ python scripts/run_cloud_pipeline.py
 The cloud pipeline runs:
 
 1. `data_process.py`
-2. `ml_pipeline.py`
-3. `scripts/register_glue_tables.py`
-4. `scripts/repair_athena_tables.py`
-5. `scripts/create_athena_views.py`
-6. `scripts/validate_athena.py`
+2. `scripts/run_data_quality.py`
+3. `ml_pipeline.py`
+4. `scripts/register_glue_tables.py`
+5. `scripts/repair_athena_tables.py`
+6. `scripts/create_athena_views.py`
+7. `scripts/validate_athena.py`
+
+The main pattern is ETL first, with an ELT/query layer after curated Parquet is
+written to S3:
+
+```text
+Python ETL -> curated Parquet -> Glue external tables -> Athena SQL views
+```
 
 ## Validated Athena Counts
 
@@ -61,6 +69,8 @@ Demo views:
 - `sales_by_product`
 - `sales_by_quarter`
 - `sales_by_loyalty`
+- `customer_value`
+- `retention_priority`
 - `churn_priority_customers`
 
 ## Cloud Evidence
