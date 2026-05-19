@@ -82,6 +82,35 @@ def run_quality_checks(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
 
     _check(rows, "fact_sales_row_count", len(fact) > 0, len(fact), "> 0")
 
+    if "Fact_ID" in fact.columns:
+        duplicate_fact_ids = int(fact["Fact_ID"].duplicated().sum())
+        _check(rows, "fact_sales_unique_fact_id", duplicate_fact_ids == 0, duplicate_fact_ids, "0 duplicates")
+
+    natural_grain = [
+        col
+        for col in [
+            "Customer_ID",
+            "Product_ID",
+            "Date_Key",
+            "Geo_Key",
+            "Revenue",
+            "Quantity_Sold",
+            "Unit_Sale_Price",
+        ]
+        if col in fact.columns
+    ]
+    if natural_grain:
+        duplicate_grain_rows = int(fact.duplicated(subset=natural_grain).sum())
+        _check(
+            rows,
+            "fact_sales_possible_duplicate_transactions",
+            duplicate_grain_rows == 0,
+            duplicate_grain_rows,
+            "0 duplicate natural-grain rows",
+            "WARNING only because the source has no immutable transaction id.",
+            level="WARNING",
+        )
+
     for column in ["Customer_ID", "Product_ID", "Date_Key"]:
         null_count = int(fact[column].isna().sum()) if column in fact.columns else len(fact)
         _check(rows, f"fact_sales_{column}_not_null", null_count == 0, null_count, "0 nulls")
@@ -132,10 +161,21 @@ def run_quality_checks(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
         "2020 rows exist and Is_Full_Year=false",
     )
 
+    if "Year" in fact.columns:
+        max_year = int(fact["Year"].max())
+        _check(
+            rows,
+            "fact_sales_recent_year_warning",
+            max_year >= 2020,
+            max_year,
+            ">= 2020",
+            "WARNING only: protects scheduled runs from accidentally loading stale raw files.",
+            level="WARNING",
+        )
+
     report = pd.DataFrame([row.__dict__ for row in rows])
     return report
 
 
 def has_blocking_failures(report: pd.DataFrame) -> bool:
     return bool(((report["level"] == "ERROR") & (report["status"] == "FAIL")).any())
-

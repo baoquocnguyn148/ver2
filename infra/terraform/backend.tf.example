@@ -1,0 +1,9 @@
+terraform {
+  backend "s3" {
+    bucket         = "your-terraform-state-bucket"
+    key            = "ver2-retail-analytics/terraform.tfstate"
+    region         = "ap-southeast-2"
+    dynamodb_table = "your-terraform-lock-table"
+    encrypt        = true
+  }
+}

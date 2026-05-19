@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import uuid
 from io import BytesIO
 from pathlib import Path
 from typing import Iterable
@@ -102,14 +103,21 @@ class DataIO:
 
         if self.local_mode:
             path = self.project_root / self.curated_prefix / table_name
-            if path.exists():
-                shutil.rmtree(path)
-            path.mkdir(parents=True, exist_ok=True)
+            tmp_path = path.with_name(f".{path.name}.tmp-{uuid.uuid4().hex}")
+            tmp_path.mkdir(parents=True, exist_ok=True)
             print(f"[DataIO] Writing local Parquet dataset: {path}")
-            if partition_cols:
-                df.to_parquet(path, index=False, partition_cols=partition_cols)
-            else:
-                df.to_parquet(path / f"{table_name}.parquet", index=False)
+            try:
+                if partition_cols:
+                    df.to_parquet(tmp_path, index=False, partition_cols=partition_cols)
+                else:
+                    df.to_parquet(tmp_path / f"{table_name}.parquet", index=False)
+                if path.exists():
+                    shutil.rmtree(path)
+                tmp_path.replace(path)
+            except Exception:
+                if tmp_path.exists():
+                    shutil.rmtree(tmp_path)
+                raise
             return str(path)
 
         wr = self._require_awswrangler()
@@ -120,7 +128,7 @@ class DataIO:
                 df=df,
                 path=path,
                 dataset=True,
-                mode="overwrite",
+                mode="overwrite_partitions" if partition_cols else "overwrite",
                 index=False,
                 partition_cols=partition_cols or None,
             )

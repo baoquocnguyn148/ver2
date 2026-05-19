@@ -8,6 +8,48 @@ resource "aws_s3_bucket" "data_lake" {
   bucket = var.bucket_name
 }
 
+resource "aws_s3_bucket_versioning" "data_lake" {
+  bucket = aws_s3_bucket.data_lake.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
+  bucket = aws_s3_bucket.data_lake.id
+
+  rule {
+    id     = "expire-athena-query-results"
+    status = "Enabled"
+
+    filter {
+      prefix = "${local.output_prefix}/athena/"
+    }
+
+    expiration {
+      days = 30
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+  }
+
+  rule {
+    id     = "expire-old-output-versions"
+    status = "Enabled"
+
+    filter {
+      prefix = "${local.output_prefix}/"
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+  }
+}
+
 resource "aws_s3_bucket_public_access_block" "data_lake" {
   bucket = aws_s3_bucket.data_lake.id
 
@@ -72,6 +114,7 @@ resource "aws_iam_policy" "pipeline_policy" {
           "glue:UpdateTable",
           "glue:DeleteTable",
           "glue:BatchCreatePartition",
+          "glue:BatchDeletePartition",
           "glue:CreatePartition",
           "glue:UpdatePartition"
         ]

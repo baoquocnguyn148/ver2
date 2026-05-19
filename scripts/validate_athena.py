@@ -13,10 +13,20 @@ if str(PROJECT_ROOT) not in sys.path:
 from src import config
 
 MAX_WAIT_SECONDS = 120
+QUERY_ATTEMPTS = 3
+RETRY_BACKOFF_SECONDS = 3
 DB = config.ATHENA_DATABASE
 
 QUERIES = {
     "fact_sales": f"SELECT count(*) AS rows FROM {DB}.fact_sales",
+    "fact_sales_freshness": (
+        f"SELECT min(year_quarter) AS min_quarter, max(year_quarter) AS max_quarter, "
+        f"count(DISTINCT year_quarter) AS quarter_count FROM {DB}.fact_sales"
+    ),
+    "fact_sales_no_negative_values": (
+        f"SELECT count(*) AS invalid_rows FROM {DB}.fact_sales "
+        "WHERE revenue < 0 OR profit < 0"
+    ),
     "dim_customer": f"SELECT count(*) AS rows FROM {DB}.dim_customer",
     "dim_product": f"SELECT count(*) AS rows FROM {DB}.dim_product",
     "dim_date": f"SELECT count(*) AS rows FROM {DB}.dim_date",
@@ -48,7 +58,7 @@ QUERIES = {
 }
 
 
-def _run_query(client, query: str):
+def _run_query_once(client, query: str):
     response = client.start_query_execution(
         QueryString=query,
         QueryExecutionContext={"Database": config.ATHENA_DATABASE},
@@ -68,6 +78,18 @@ def _run_query(client, query: str):
                 raise RuntimeError(f"Athena {state}: {reason}")
             return client.get_query_results(QueryExecutionId=query_id)["ResultSet"]["Rows"]
         time.sleep(1)
+
+
+def _run_query(client, query: str):
+    for attempt in range(1, QUERY_ATTEMPTS + 1):
+        try:
+            return _run_query_once(client, query)
+        except Exception:
+            if attempt >= QUERY_ATTEMPTS:
+                raise
+            sleep_seconds = RETRY_BACKOFF_SECONDS * attempt
+            print(f"      transient query error; retrying in {sleep_seconds}s...")
+            time.sleep(sleep_seconds)
 
 
 def main() -> None:
@@ -91,6 +113,8 @@ def main() -> None:
             print(f"  FAIL {name}: {exc}")
     print()
     print(f"Validation complete: {passed}/{len(QUERIES)} checks passed")
+    if passed != len(QUERIES):
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

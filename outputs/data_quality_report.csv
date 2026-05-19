@@ -4,6 +4,8 @@ DIM_Customer_required_columns,ERROR,PASS,none,no missing required columns,
 DIM_Product_required_columns,ERROR,PASS,none,no missing required columns,
 DIM_Date_required_columns,ERROR,PASS,none,no missing required columns,
 fact_sales_row_count,ERROR,PASS,84436,> 0,
+fact_sales_unique_fact_id,ERROR,PASS,0,0 duplicates,
+fact_sales_possible_duplicate_transactions,WARNING,FAIL,13259,0 duplicate natural-grain rows,WARNING only because the source has no immutable transaction id.
 fact_sales_Customer_ID_not_null,ERROR,PASS,0,0 nulls,
 fact_sales_Product_ID_not_null,ERROR,PASS,0,0 nulls,
 fact_sales_Date_Key_not_null,ERROR,PASS,0,0 nulls,
@@ -16,3 +18,4 @@ fact_sales_no_negative_revenue,ERROR,PASS,0,0 rows,
 fact_sales_no_negative_profit,ERROR,PASS,0,0 rows,
 fact_sales_accepted_quarter_values,ERROR,PASS,none,"Q1, Q2, Q3, Q4 only",
 fact_sales_2020_partial_year_flag,ERROR,PASS,present,2020 rows exist and Is_Full_Year=false,
+fact_sales_recent_year_warning,WARNING,PASS,2020,>= 2020,WARNING only: protects scheduled runs from accidentally loading stale raw files.

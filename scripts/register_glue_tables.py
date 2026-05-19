@@ -51,13 +51,19 @@ def _athena_type(dtype) -> str:
 
 def _sample_schema(path: str):
     """Read a small Parquet chunk to infer dtypes without loading the full dataset."""
+    parquet_files = [
+        object_path
+        for object_path in wr.s3.list_objects(path=path)
+        if object_path.endswith(".parquet")
+    ]
+    if not parquet_files:
+        raise ValueError(f"No Parquet files found under {path}. Run data_process.py before registering Glue tables.")
+
     chunks = wr.s3.read_parquet(path=path, dataset=True, chunked=500)
     try:
         return next(chunks)
     except StopIteration:
-        import pandas as pd
-
-        return pd.DataFrame()
+        raise ValueError(f"Parquet dataset is empty under {path}. Refusing to register a zero-column Glue table.")
 
 
 def main() -> None:
@@ -70,6 +76,8 @@ def main() -> None:
             for col, dtype in sample.dtypes.items()
             if col not in partition_cols
         }
+        if not columns_types:
+            raise ValueError(f"Could not infer any non-partition columns for {table_name} from {spec['path']}")
         partitions_types = {col: "string" for col in partition_cols}
         wr.catalog.create_parquet_table(
             database=config.ATHENA_DATABASE,
