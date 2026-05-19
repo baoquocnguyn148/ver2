@@ -22,17 +22,715 @@ Các insight chính dành cho business stakeholder:
 | 2020-Q1 anomaly | Revenue tăng 70.4% dù orders giảm 73.5%; tăng trưởng đến từ AOV/product mix, không phải volume. `Computers and Home Office` tăng lên 75.3% revenue quý. | Kiểm tra bulk orders, order type, channel và product mix trước khi xem đây là tăng trưởng bền vững. |
 | Retention | Churn risk model có ROC-AUC khoảng 52.0%, phù hợp làm danh sách ưu tiên hơn là quyết định tuyệt đối. | Chạy retention theo top-N `Expected_Revenue_At_Risk`, đo contact rate, conversion và retained revenue. |
 
-## 1.2 AWS Cloud Data Lakehouse Module
+## 1.2 AWS Cloud Data Lakehouse — Module Data Engineering
 
-Project đã được mở rộng từ pipeline chạy local thành một AWS Data Lakehouse nhỏ gọn, tối ưu cho portfolio và AWS Free Tier.
+> **Portfolio Site (Live):** https://main.dkb6koqkmw7iv.amplifyapp.com
 
-Public portfolio site:
+Project được nâng cấp từ pipeline chạy local thành một **Serverless Data Lakehouse** trên AWS, tối ưu cho Free Tier và portfolio. Thay vì duy trì một database server tốn kém, dữ liệu được lưu dưới dạng file **Parquet** trên **Amazon S3** và truy vấn bằng **Amazon Athena** theo mô hình pay-per-query — chỉ trả tiền khi chạy query thực sự.
 
-https://main.dkb6koqkmw7iv.amplifyapp.com
+---
 
-Kiến trúc cloud hiện tại:
+### Kiến Trúc Tổng Quan
 
 ![AWS Data Lakehouse Architecture](docs/images/aws_architecture_diagram.svg)
+
+Hệ thống được chia thành 4 lớp (layer) độc lập, chạy tuần tự từ trái sang phải:
+
+| Layer | Services | Vai Trò |
+|---|---|---|
+| **CI/CD & Orchestration** | GitHub Actions, Docker | Kích hoạt, test-gate, build image, schedule cron hàng tuần |
+| **Processing** | Python 3.12, Pandas | ETL, feature engineering, ML, data quality checks |
+| **Storage — S3 Data Lake** | Amazon S3 | Lưu raw file, curated Parquet tables, và ML artifacts |
+| **Query & Presentation** | Glue Catalog, Athena, Power BI, Amplify | Metadata, truy vấn SQL, dashboard BI, trang portfolio công khai |
+
+---
+
+### Cấu Trúc File — Các Thành Phần DE
+
+```
+ver2/
+├── data_process.py                  # ETL chính: extract, transform, xuất star schema + Parquet
+├── ml_pipeline.py                   # Entrypoint ML: forecast doanh thu + dự đoán churn
+├── Dockerfile                       # Container reproducible cho local và CI
+├── requirements.txt                 # Thư viện Python đã pin version (boto3, awswrangler…)
+│
+├── src/
+│   ├── config.py                    # Config trung tâm: toggle LOCAL_MODE vs S3, tất cả env vars
+│   ├── etl/
+│   │   ├── build_dimensions.py      # Xây dựng các dimension table
+│   │   ├── build_fact.py            # Xây dựng fact table
+│   │   └── data_quality.py          # DQ rule engine: phân loại ERROR (blocking) / WARNING
+│   └── utils/
+│       └── io_utils.py              # Class DataIO: đọc/ghi file ở cả local mode và S3 mode
+│
+├── scripts/
+│   ├── run_cloud_pipeline.py        # Orchestrator: chạy 7 steps tuần tự, có retry + timing log
+│   ├── run_data_quality.py          # Chạy DQ checks, xuất report CSV lên S3
+│   ├── register_glue_tables.py      # Infer schema từ Parquet, tạo/ghi đè Glue external tables
+│   ├── repair_athena_tables.py      # Chạy MSCK REPAIR TABLE để cập nhật partition mới
+│   ├── create_athena_views.py       # DROP + CREATE các analytics views từ sql/views/*.sql
+│   └── validate_athena.py           # Kiểm tra row count và chạy sample query trên Athena
+│
+├── sql/views/                       # SQL ELT layer — các analytics mart phục vụ BI và báo cáo
+│   ├── sales_by_product.sql
+│   ├── sales_by_quarter.sql
+│   ├── sales_by_loyalty.sql
+│   ├── customer_value.sql
+│   ├── retention_priority.sql
+│   └── churn_priority_customers.sql
+│
+├── infra/terraform/                 # Infrastructure as Code
+│   ├── main.tf                      # S3, versioning, lifecycle, Glue DB, Athena workgroup, IAM policy
+│   ├── variables.tf
+│   ├── versions.tf
+│   ├── outputs.tf
+│   └── backend.tf                   # Hướng dẫn cấu hình S3 remote backend (commented — xem file)
+│
+├── .github/workflows/
+│   └── pipeline.yml                 # CI/CD: test → Docker build → cloud pipeline → upload artifacts
+│
+└── tests/
+    ├── test_smoke.py                # Smoke test cho ETL logic cốt lõi
+    ├── test_data_quality.py         # Test DQ engine: ERROR chặn pipeline, WARNING thì không
+    └── test_register_glue_tables.py # Test guard khi S3 path rỗng chưa có Parquet
+```
+
+---
+
+### Luồng Pipeline End-to-End
+
+Pipeline được kích hoạt thủ công hoặc tự động theo lịch hàng tuần qua **GitHub Actions**. Khi chạy local, chỉ cần một lệnh duy nhất: `python scripts/run_cloud_pipeline.py`.
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  BƯỚC 1  │  Extract & Transform  (data_process.py)                   │
+│          │  ► Đọc DB.xlsx từ local hoặc s3://.../raw/               │
+│          │  ► Làm sạch dữ liệu, tính metrics: revenue, profit, AOV  │
+│          │  ► Xây dựng Star Schema: 1 fact table + 5 dim tables     │
+│          │  ► Xuất data_model.xlsx cho Power BI                      │
+│          │  ► Ghi curated Parquet (partitioned) lên S3              │
+├──────────────────────────────────────────────────────────────────────┤
+│  BƯỚC 2  │  Data Quality Gate  (run_data_quality.py)                 │
+│          │  ► Load star schema, chạy 15+ DQ checks tự động          │
+│          │  ► Upload data_quality_report.csv lên S3 outputs/         │
+│          │  ► Pipeline dừng ngay nếu có lỗi ERROR level             │
+├──────────────────────────────────────────────────────────────────────┤
+│  BƯỚC 3  │  ML Pipeline  (ml_pipeline.py)                            │
+│          │  ► Forecast doanh thu & lợi nhuận (Holt-Winters)          │
+│          │  ► Dự đoán churn khách hàng (XGBoost)                    │
+│          │  ► Upload CSV, XLSX, .pkl model, ảnh confusion matrix     │
+├──────────────────────────────────────────────────────────────────────┤
+│  BƯỚC 4  │  Register Glue Tables  (register_glue_tables.py)          │
+│          │  ► Sample 500 dòng từ mỗi Parquet path để infer schema   │
+│          │  ► Map Pandas dtype → Athena type (bigint, double…)       │
+│          │  ► Tạo hoặc ghi đè 5 external tables trong Glue Catalog  │
+│          │  ► Fail rõ ràng nếu S3 path rỗng, tránh đăng ký 0-column │
+├──────────────────────────────────────────────────────────────────────┤
+│  BƯỚC 5  │  Repair Athena Partitions  (repair_athena_tables.py)      │
+│          │  ► Chạy MSCK REPAIR TABLE trên 5 tables                  │
+│          │  ► Athena tự phát hiện các partition folder mới trên S3  │
+├──────────────────────────────────────────────────────────────────────┤
+│  BƯỚC 6  │  Create Athena Views  (create_athena_views.py)            │
+│          │  ► DROP các view cũ theo thứ tự ngược dependency          │
+│          │  ► CREATE lại 6 analytics views từ sql/views/*.sql        │
+│          │  ► Timeout 300s mỗi query để tránh pipeline bị treo      │
+├──────────────────────────────────────────────────────────────────────┤
+│  BƯỚC 7  │  Validate Athena  (validate_athena.py)                    │
+│          │  ► Chạy SELECT COUNT(*) trên 5 tables                    │
+│          │  ► Chạy sample query trên 6 views                        │
+│          │  ► In pass/fail summary — pipeline fail nếu có lỗi bất kỳ│
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+**Orchestrator (`run_cloud_pipeline.py`) cung cấp thêm:**
+- **Retry tự động** — các bước kết nối AWS retry tối đa 3 lần, backoff 10s → 20s
+- **Timing log** — in thời gian chạy của từng bước và tổng thời gian pipeline
+- **Fail-fast** — bước nào lỗi là pipeline dừng ngay, không chạy tiếp bước sau
+
+---
+
+### Star Schema — Data Model
+
+```
+                    ┌──────────────┐
+                    │  DIM_Date    │
+                    │  Date_Key PK │
+                    │  Year        │
+                    │  Quarter     │
+                    └──────┬───────┘
+                           │ FK
+┌──────────────┐    ┌──────▼────────────────┐    ┌─────────────────┐
+│ DIM_Product  │    │      FACT_Sales        │    │  DIM_Customer   │
+│ Product_ID PK├────│  Customer_ID (FK)      ├────│  Customer_ID PK │
+│ Product_Line │    │  Product_ID (FK)       │    │  LoyaltyStatus  │
+│ Category     │    │  Date_Key (FK)         │    │  CLV_Segment    │
+└──────────────┘    │  Geo_Key (FK)          │    │  Income_Bucket  │
+                    │  Revenue               │    └─────────────────┘
+┌──────────────┐    │  Profit                │
+│DIM_Geography ├────│  Quantity_Sold         │
+│ Geo_Key PK   │    │  Margin_Pct            │
+│ Country      │    │  Is_Full_Year          │
+│ Province     │    └───────────────────────┘
+└──────────────┘
+```
+
+**Kết quả đã validate trên AWS `ap-southeast-2`:**
+
+| Bảng | Số dòng | Partition Key |
+|---|---:|---|
+| `fact_sales` | 84,436 | `partition_year` |
+| `dim_customer` | 63,228 | `partition_loyalty_status` |
+| `dim_product` | 5 | *(không có)* |
+| `dim_date` | 17 | `partition_year` |
+| `dim_geography` | 221 | `partition_country` |
+
+---
+
+### S3 Data Lake Layout
+
+```
+s3://ver2-retail-analytics/
+│
+├── raw/                                         ← Nguồn dữ liệu gốc, S3 Versioning bật sẵn
+│   └── DB.xlsx
+│
+├── curated/                                     ← Parquet datasets, Glue catalog trỏ vào đây
+│   ├── fact_sales/
+│   │   ├── partition_year=2016/*.parquet
+│   │   ├── partition_year=2017/*.parquet
+│   │   ├── partition_year=2018/*.parquet
+│   │   └── partition_year=2019/*.parquet
+│   ├── dim_customer/
+│   │   ├── partition_loyalty_status=Bronze/*.parquet
+│   │   ├── partition_loyalty_status=Silver/*.parquet
+│   │   └── partition_loyalty_status=Gold/*.parquet
+│   ├── dim_product/*.parquet
+│   ├── dim_date/partition_year=YYYY/*.parquet
+│   └── dim_geography/partition_country=.../*.parquet
+│
+└── outputs/                                     ← ML artifacts và pipeline logs
+    ├── data_quality_report.csv
+    ├── forecast_revenue_profit.csv
+    ├── churn_priority_customers.csv
+    ├── reports/data_model_cloud.xlsx
+    ├── models/churn_model.pkl
+    ├── images/confusion_matrix.png
+    └── athena/                                  ← Kết quả query Athena, tự xóa sau 30 ngày
+```
+
+**Chính sách lưu trữ (quản lý bởi Terraform):**
+- `raw/` bật **S3 Versioning** — ghi đè `DB.xlsx` vẫn giữ lại phiên bản cũ để rollback
+- `outputs/athena/` tự động hết hạn và xóa sau **30 ngày** qua S3 Lifecycle Rule → tiết kiệm chi phí
+- Toàn bộ bucket block public access — không có gì có thể truy cập công khai
+
+---
+
+### Athena Analytics Views — Lớp ELT
+
+6 views được tạo trên curated tables, đóng vai trò **analytics mart** phục vụ Power BI và demo query:
+
+| View | Mục đích | Columns chính |
+|---|---|---|
+| `sales_by_product` | Breakdown doanh thu & lợi nhuận theo product line | `product_line`, `total_revenue`, `total_profit`, `margin_pct` |
+| `sales_by_quarter` | Phân tích xu hướng theo quý | `year_quarter`, `total_revenue`, `order_count`, `aov` |
+| `sales_by_loyalty` | Đóng góp doanh thu theo loyalty tier | `loyaltystatus`, `loyalty_rank`, `total_revenue`, `unique_customers` |
+| `customer_value` | Xếp hạng CLV theo từng khách hàng | `customer_id`, `total_revenue`, `order_count` |
+| `retention_priority` | Nhóm khách hàng theo mức độ rủi ro churn | `retention_priority`, `customer_count` |
+| `churn_priority_customers` | Danh sách churn risk chi tiết kèm revenue at risk | `customer_id`, `expected_revenue_at_risk`, `retention_priority` |
+
+---
+
+### Data Quality Framework
+
+Module `src/etl/data_quality.py` chạy **15+ checks tự động** trên mỗi lần pipeline thực thi, trước khi bất kỳ dữ liệu nào được ghi lên S3 hoặc Athena.
+
+| Nhóm Check | Nội dung | Severity |
+|---|---|---|
+| Schema | Đủ các cột bắt buộc trên cả 5 bảng | ERROR |
+| Completeness | `Customer_ID`, `Product_ID`, `Date_Key` không được null trong fact | ERROR |
+| Uniqueness | `Customer_ID` unique trong `dim_customer`; `Fact_ID` unique trong fact | ERROR |
+| Referential Integrity | FK check đủ 4 chiều: Customer, Product, Date, Geography | ERROR |
+| Business Rules | Không có revenue/profit âm; quarter chỉ nhận {Q1, Q2, Q3, Q4} | ERROR |
+| Temporal Validity | Dòng năm 2020 phải có `Is_Full_Year = false` | ERROR |
+| Duplicate Transactions | Phát hiện dòng trùng lặp theo natural grain | **WARNING** (không chặn) |
+
+**Nguyên tắc thiết kế:**
+- **ERROR** → pipeline **dừng ngay**, downstream steps không được chạy trên dữ liệu xấu
+- **WARNING** → được log và upload lên S3, nhưng **không chặn** pipeline tiếp tục
+- Report đầy đủ được lưu tại `s3://.../outputs/data_quality_report.csv` sau mỗi lần chạy
+
+---
+
+### Infrastructure as Code — Terraform
+
+Toàn bộ tài nguyên AWS được khai báo trong `infra/terraform/`. Chạy một lệnh `terraform apply` là dựng xong môi trường.
+
+| Resource | Mô tả |
+|---|---|
+| `aws_s3_bucket` | Bucket `ver2-retail-analytics` |
+| `aws_s3_bucket_versioning` | Bật versioning cho raw zone |
+| `aws_s3_bucket_lifecycle_configuration` | Athena output tự xóa sau 30 ngày; old versions dọn sau 30 ngày |
+| `aws_s3_bucket_public_access_block` | Block toàn bộ public access |
+| `aws_glue_catalog_database` | Glue database `retail_analytics` |
+| `aws_athena_workgroup` | `retail_analytics_workgroup`, enforce output location |
+| `aws_iam_policy` | `ver2-retail-pipeline-policy` — least-privilege S3 + Glue + Athena |
+| `aws_iam_user_policy_attachment` | Gắn policy vào pipeline IAM user |
+
+```bash
+cd infra/terraform
+cp terraform.tfvars.example terraform.tfvars   # điền bucket_name, pipeline_user_name
+terraform init
+terraform plan
+terraform apply
+```
+
+> Xem file `backend.tf` để biết cách chuyển sang S3 remote backend khi cần.
+
+---
+
+### CI/CD Pipeline — GitHub Actions
+
+File `.github/workflows/pipeline.yml` chạy khi trigger thủ công hoặc theo lịch **Chủ nhật 01:00 UTC** hàng tuần.
+
+```
+Bước 1.  Checkout repository
+Bước 2.  Configure AWS credentials (từ repo secrets)
+Bước 3.  Cài Python 3.12 với pip cache
+Bước 4.  Install dependencies + tạo output directories
+Bước 5. ► Chạy unit tests  ← test gate: fail ở đây trước khi đụng tới AWS
+Bước 6.  Build Docker image  ← validate Dockerfile mỗi lần push
+Bước 7. ► Chạy cloud pipeline  (7 steps như mô tả ở trên)
+Bước 8.  Upload pipeline reports làm GitHub Actions artifact (chạy ngay cả khi fail)
+Bước 9.  Notify on failure: in link trực tiếp tới run log
+```
+
+**Repository secrets cần cấu hình:**
+
+| Secret | Mô tả |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | Access key của IAM user có `ver2-retail-pipeline-policy` |
+| `AWS_SECRET_ACCESS_KEY` | Secret key tương ứng |
+
+---
+
+### Quick Start — Chạy Local
+
+```powershell
+# 1. Clone và cài đặt môi trường
+git clone https://github.com/baoquocnguyn148/ver2.git
+cd ver2
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+# 2. Cấu hình environment
+copy .env.example .env
+# Mở .env, đặt LOCAL_MODE=true để test local; false + AWS credentials để chạy cloud
+
+# 3. Kiểm tra kết nối AWS (chỉ cần ở cloud mode)
+.\aws.cmd sts get-caller-identity
+.\aws.cmd s3 ls s3://ver2-retail-analytics/raw/
+
+# 4. Chạy toàn bộ pipeline
+$env:PYTHONIOENCODING = "utf-8"
+python scripts/run_cloud_pipeline.py
+
+# 5. Chạy unit tests độc lập
+python -m unittest discover -s tests
+```
+
+**Tham chiếu biến môi trường:**
+
+| Biến | Mặc định | Mô tả |
+|---|---|---|
+| `LOCAL_MODE` | `true` | `true` = đọc/ghi file local; `false` = dùng S3 |
+| `S3_BUCKET` | `ver2-retail-analytics` | Tên S3 bucket |
+| `RAW_KEY` | `raw/DB.xlsx` | S3 key của file nguồn |
+| `CURATED_PREFIX` | `curated/` | S3 prefix cho Parquet tables |
+| `OUTPUT_PREFIX` | `outputs/` | S3 prefix cho ML artifacts và reports |
+| `ATHENA_DATABASE` | `retail_analytics` | Tên Glue/Athena database |
+| `ATHENA_WORKGROUP` | `retail_analytics_workgroup` | Athena workgroup (kiểm soát output location) |
+| `ATHENA_OUTPUT` | `s3://ver2-retail-analytics/outputs/athena/` | Nơi lưu kết quả query Athena |
+| `AWS_DEFAULT_REGION` | `ap-southeast-2` | AWS region |
+| `WORK_DIR` | *(project root)* | Thư mục làm việc cho intermediate files |
+
+---
+
+### Cloud Evidence Screenshots
+
+| Bằng chứng | Screenshot |
+|---|---|
+| S3 bucket root | ![S3 bucket root](docs/images/cloud/s3-bucket-root.png) |
+| S3 curated Parquet layer | ![S3 curated layer](docs/images/cloud/s3-curated-layer.png) |
+| S3 fact_sales year partitions | ![S3 fact sales partitions](docs/images/cloud/s3-fact-sales-partitions.png) |
+| S3 pipeline outputs & ML artifacts | ![S3 outputs artifacts](docs/images/cloud/s3-outputs-artifacts.png) |
+| Glue Data Catalog tables | ![Glue catalog tables](docs/images/cloud/glue-catalog-tables.png) |
+| Athena fact table row count | ![Athena fact count](docs/images/cloud/athena-fact-count.png) |
+| Athena sales view query | ![Athena sales by product](docs/images/cloud/athena-sales-by-product.png) |
+| Athena retention priority view | ![Athena retention priority](docs/images/cloud/athena-retention-priority.png) |
+| GitHub Actions CI success | ![GitHub Actions success](docs/images/cloud/github-actions-success.png) |
+| Amplify public deploy | ![Amplify deploy success](docs/images/cloud/amplify-deploy-success.png) |
+| AWS Budget guardrail | ![AWS Budget guardrail](docs/images/cloud/aws-budget-guardrail.png) |
+
+This section documents the **production-grade Data Engineering layer** that backs the entire pipeline. The system follows a **Serverless Data Lakehouse** pattern: data is stored as columnar Parquet files on Amazon S3 and queried on-demand via Amazon Athena, eliminating the need for an always-on database server.
+
+---
+
+### Architecture Overview
+
+![AWS Data Lakehouse Architecture](docs/images/aws_architecture_diagram.svg)
+
+The pipeline is split into four logical layers, executed left-to-right:
+
+| Layer | Services | Responsibility |
+|---|---|---|
+| **CI/CD & Orchestration** | GitHub Actions, Docker | Trigger, test-gate, build, schedule, notify |
+| **Processing** | Python 3.12, Pandas, Docker | ETL, feature engineering, ML, DQ checks |
+| **Storage (S3 Data Lake)** | Amazon S3 | Raw, curated Parquet, and output artifacts |
+| **Query & Presentation** | Glue Catalog, Athena, Power BI, Amplify | Metadata, SQL analytics, BI, public portfolio |
+
+---
+
+### Repository Structure — DE Components
+
+```
+ver2/
+├── data_process.py                  # Main ETL: extract, transform, star-schema export
+├── ml_pipeline.py                   # ML entrypoint (forecast + churn)
+├── Dockerfile                       # Reproducible container for local and CI runs
+├── requirements.txt                 # Pinned Python deps (boto3, awswrangler, pandas…)
+│
+├── src/
+│   ├── config.py                    # Unified config: LOCAL_MODE / S3 toggle, all env vars
+│   ├── etl/
+│   │   ├── build_dimensions.py      # Star-schema dimension builders
+│   │   ├── build_fact.py            # Fact table assembly
+│   │   └── data_quality.py          # DQ rule engine (ERROR/WARNING classification)
+│   └── utils/
+│       └── io_utils.py              # DataIO class: dual-mode local/S3 read-write
+│
+├── scripts/
+│   ├── run_cloud_pipeline.py        # Orchestrator: sequential steps with retry + timing
+│   ├── run_data_quality.py          # DQ runner: loads star-schema, runs checks, uploads CSV
+│   ├── register_glue_tables.py      # Infers schema from Parquet, creates/overwrites Glue tables
+│   ├── repair_athena_tables.py      # MSCK REPAIR TABLE for all 5 tables
+│   ├── create_athena_views.py       # DROP+CREATE analytics views from sql/views/*.sql
+│   └── validate_athena.py           # Row-count + sample-query validation for all tables/views
+│
+├── sql/views/                       # SQL ELT layer (analytics marts)
+│   ├── sales_by_product.sql
+│   ├── sales_by_quarter.sql
+│   ├── sales_by_loyalty.sql
+│   ├── customer_value.sql
+│   ├── retention_priority.sql
+│   └── churn_priority_customers.sql
+│
+├── infra/terraform/                 # Infrastructure as Code
+│   ├── main.tf                      # S3, versioning, lifecycle, Glue, Athena, IAM policy
+│   ├── variables.tf
+│   ├── versions.tf
+│   ├── outputs.tf
+│   └── backend.tf                   # Remote backend config (commented — see file)
+│
+├── .github/workflows/
+│   └── pipeline.yml                 # CI/CD: test → Docker build → cloud pipeline → artifact upload
+│
+└── tests/
+    ├── test_smoke.py                # Core ETL logic smoke tests
+    ├── test_data_quality.py         # DQ engine: ERROR blocking, WARNING non-blocking
+    └── test_register_glue_tables.py # Glue script: empty-path guard test
+```
+
+---
+
+### End-to-End Pipeline Flow
+
+The full pipeline is triggered manually or on a weekly cron (`every Sunday 01:00 UTC`) via GitHub Actions. Locally it can be run in a single command.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  STEP 1  │  Extract & Transform (data_process.py)                   │
+│          │  ► Reads raw DB.xlsx from local or S3 raw/               │
+│          │  ► Cleans, normalises, computes business metrics         │
+│          │  ► Builds Star Schema: 1 fact + 5 dimensions             │
+│          │  ► Exports data_model.xlsx for Power BI                  │
+│          │  ► Writes curated Parquet datasets to S3 curated/        │
+├─────────────────────────────────────────────────────────────────────┤
+│  STEP 2  │  Data Quality Gate (run_data_quality.py)                 │
+│          │  ► Loads star-schema from data_model.xlsx                │
+│          │  ► Runs 15+ automated DQ checks (see section below)      │
+│          │  ► Uploads data_quality_report.csv to S3 outputs/        │
+│          │  ► Pipeline aborts on any ERROR-level failure            │
+├─────────────────────────────────────────────────────────────────────┤
+│  STEP 3  │  ML Pipeline (ml_pipeline.py)                            │
+│          │  ► Revenue & profit forecasting (Holt-Winters)           │
+│          │  ► Customer churn prediction (XGBoost)                   │
+│          │  ► Uploads CSVs, XLSX reports, .pkl models, images to S3 │
+├─────────────────────────────────────────────────────────────────────┤
+│  STEP 4  │  Register Glue Tables (register_glue_tables.py)          │
+│          │  ► Samples 500 rows from each curated Parquet path       │
+│          │  ► Infers column dtypes → maps to Athena types           │
+│          │  ► Creates/overwrites 5 external tables in Glue Catalog  │
+│          │  ► Fails fast if S3 path is empty (prevents zero-schema) │
+├─────────────────────────────────────────────────────────────────────┤
+│  STEP 5  │  Repair Athena Partitions (repair_athena_tables.py)      │
+│          │  ► Runs MSCK REPAIR TABLE on all 5 tables                │
+│          │  ► Discovers new partition directories automatically      │
+├─────────────────────────────────────────────────────────────────────┤
+│  STEP 6  │  Create Athena Views (create_athena_views.py)            │
+│          │  ► Drops existing views in reverse-dependency order      │
+│          │  ► Recreates 6 analytics views from sql/views/*.sql      │
+│          │  ► 300s timeout per query to prevent pipeline deadlock   │
+├─────────────────────────────────────────────────────────────────────┤
+│  STEP 7  │  Validate Athena (validate_athena.py)                    │
+│          │  ► Runs SELECT COUNT(*) on 5 tables                      │
+│          │  ► Runs sample queries on 6 views                        │
+│          │  ► Prints pass/fail summary — pipeline fails if any FAIL │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+The orchestrator (`run_cloud_pipeline.py`) adds:
+- **Per-step retry** — AWS/network steps retry up to 3× with exponential backoff (10s, 20s)
+- **Timing summary** — prints elapsed seconds per step and total at the end
+- **Fail-fast** — any step failure immediately aborts the pipeline with a clear error
+
+---
+
+### Star Schema (Data Model)
+
+```
+                    ┌──────────────┐
+                    │  DIM_Date    │
+                    │  Date_Key    │
+                    │  Year        │
+                    │  Quarter     │
+                    └──────┬───────┘
+                           │
+┌──────────────┐    ┌──────▼────────────────┐    ┌─────────────────┐
+│ DIM_Product  │    │      FACT_Sales        │    │  DIM_Customer   │
+│ Product_ID   ├────│  Customer_ID (FK)      ├────│  Customer_ID    │
+│ Product_Line │    │  Product_ID (FK)       │    │  LoyaltyStatus  │
+│ Category     │    │  Date_Key (FK)         │    │  CLV_Segment    │
+└──────────────┘    │  Geo_Key (FK)          │    │  Income_Bucket  │
+                    │  Revenue               │    └─────────────────┘
+┌──────────────┐    │  Profit                │
+│ DIM_Geography├────│  Quantity_Sold         │
+│ Geo_Key      │    │  Is_Full_Year          │
+│ Country      │    └───────────────────────┘
+│ Province     │
+└──────────────┘
+```
+
+**Validated row counts (AWS `ap-southeast-2`, as of last pipeline run):**
+
+| Table | Rows | Partition Key |
+|---|---:|---|
+| `fact_sales` | 84,436 | `partition_year` |
+| `dim_customer` | 63,228 | `partition_loyalty_status` |
+| `dim_product` | 5 | *(none)* |
+| `dim_date` | 17 | `partition_year` |
+| `dim_geography` | 221 | `partition_country` |
+
+---
+
+### S3 Data Lake Layout
+
+```
+s3://ver2-retail-analytics/
+│
+├── raw/
+│   └── DB.xlsx                              ← source of truth, versioning enabled
+│
+├── curated/                                 ← Parquet datasets, Glue-queryable
+│   ├── fact_sales/
+│   │   ├── partition_year=2016/*.parquet
+│   │   ├── partition_year=2017/*.parquet
+│   │   ├── partition_year=2018/*.parquet
+│   │   └── partition_year=2019/*.parquet
+│   ├── dim_customer/
+│   │   ├── partition_loyalty_status=Bronze/*.parquet
+│   │   ├── partition_loyalty_status=Silver/*.parquet
+│   │   └── partition_loyalty_status=Gold/*.parquet
+│   ├── dim_product/*.parquet
+│   ├── dim_date/
+│   │   └── partition_year=YYYY/*.parquet
+│   └── dim_geography/
+│       └── partition_country=.../*.parquet
+│
+└── outputs/                                 ← ML artifacts and pipeline logs
+    ├── data_quality_report.csv
+    ├── forecast_revenue_profit.csv
+    ├── churn_priority_customers.csv
+    ├── reports/data_model_cloud.xlsx
+    ├── models/churn_model.pkl
+    ├── images/confusion_matrix.png
+    └── athena/                              ← Athena query result cache (auto-expires 30d)
+```
+
+**Storage policies (managed by Terraform):**
+- `raw/` has **S3 Versioning enabled** — overwriting DB.xlsx does not lose previous data
+- `outputs/athena/` query results **auto-expire after 30 days** via lifecycle rule
+- All public access is fully blocked at the bucket level
+
+---
+
+### Athena Analytics Views
+
+Six views are created on top of the curated tables, serving as analytics marts:
+
+| View | Purpose | Key Columns |
+|---|---|---|
+| `sales_by_product` | Revenue & profit breakdown by product line | `product_line`, `total_revenue`, `total_profit`, `margin_pct` |
+| `sales_by_quarter` | Quarterly trend analysis | `year_quarter`, `total_revenue`, `order_count`, `aov` |
+| `sales_by_loyalty` | Revenue contribution by loyalty tier | `loyaltystatus`, `loyalty_rank`, `total_revenue`, `unique_customers` |
+| `customer_value` | Top customer lifetime value ranking | `customer_id`, `total_revenue`, `order_count` |
+| `retention_priority` | Customers grouped by churn risk tier | `retention_priority`, `customer_count` |
+| `churn_priority_customers` | Detailed churn risk list with revenue at risk | `customer_id`, `expected_revenue_at_risk`, `retention_priority` |
+
+---
+
+### Data Quality Framework
+
+The DQ engine (`src/etl/data_quality.py`) runs **15+ automated checks** on every pipeline run before any data reaches S3 or Athena.
+
+**Check categories:**
+
+| Category | Checks | Severity |
+|---|---|---|
+| Schema | Required columns present on all 5 tables | ERROR |
+| Completeness | `Customer_ID`, `Product_ID`, `Date_Key` not null in fact | ERROR |
+| Uniqueness | `Customer_ID` unique in `dim_customer`; `Fact_ID` unique in fact | ERROR |
+| Referential Integrity | FK checks for all 4 dimension joins | ERROR |
+| Business Rules | No negative revenue/profit; quarter values in {Q1,Q2,Q3,Q4} | ERROR |
+| Temporal Validity | 2020 rows correctly flagged as partial year | ERROR |
+| Duplicate Transactions | Duplicate natural-grain rows detected | **WARNING** (non-blocking) |
+
+**Key design decisions:**
+- `ERROR` = **blocks pipeline** — downstream steps never run on bad data
+- `WARNING` = logged and uploaded to S3 but does **not** abort the pipeline
+- The full DQ report CSV is uploaded to `s3://ver2-retail-analytics/outputs/data_quality_report.csv` on every run for auditability
+
+---
+
+### Infrastructure as Code (Terraform)
+
+All AWS resources are defined in `infra/terraform/`. A single `terraform apply` provisions the full environment.
+
+**Resources managed:**
+
+| Resource | Details |
+|---|---|
+| `aws_s3_bucket` | `ver2-retail-analytics` data lake bucket |
+| `aws_s3_bucket_versioning` | Enabled on raw zone for rollback safety |
+| `aws_s3_bucket_lifecycle_configuration` | Athena outputs expire after 30 days; old output versions cleaned up |
+| `aws_s3_bucket_public_access_block` | All public access blocked |
+| `aws_glue_catalog_database` | `retail_analytics` Glue database |
+| `aws_athena_workgroup` | `retail_analytics_workgroup` with enforced output location |
+| `aws_iam_policy` | `ver2-retail-pipeline-policy` — least-privilege for S3, Glue, Athena |
+| `aws_iam_user_policy_attachment` | Attaches policy to pipeline IAM user |
+
+**Provision the infrastructure:**
+```bash
+cd infra/terraform
+cp terraform.tfvars.example terraform.tfvars   # fill in your values
+terraform init
+terraform plan
+terraform apply
+```
+
+> Remote state: see `backend.tf` for optional S3 remote backend configuration.
+
+---
+
+### CI/CD Pipeline (GitHub Actions)
+
+The workflow at `.github/workflows/pipeline.yml` runs on every manual trigger or weekly schedule.
+
+**Steps executed in order:**
+
+```
+1. Checkout repository
+2. Configure AWS credentials (from repo secrets)
+3. Set up Python 3.12 with pip cache
+4. Install dependencies + create output directories
+5. ► Run unit tests (test gate — fails here before touching AWS)
+6. Build Docker image (validates Dockerfile on every push)
+7. ► Run cloud pipeline (7 steps, see Pipeline Flow above)
+8. Upload pipeline reports as GitHub Actions artifacts (always runs)
+9. Notify on failure (prints error + link to run logs)
+```
+
+**Required GitHub repository secrets:**
+
+| Secret | Description |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | IAM user access key with `ver2-retail-pipeline-policy` attached |
+| `AWS_SECRET_ACCESS_KEY` | Corresponding secret key |
+
+---
+
+### Quick Start — Run Locally
+
+**Prerequisites:** Python 3.12, AWS CLI configured, `.venv` active.
+
+```powershell
+# 1. Clone and set up environment
+git clone https://github.com/baoquocnguyn148/ver2.git
+cd ver2
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+# 2. Configure environment
+copy .env.example .env
+# Edit .env — set LOCAL_MODE=true for local run, or false + AWS creds for cloud
+
+# 3. Verify AWS identity (cloud mode only)
+.\aws.cmd sts get-caller-identity
+.\aws.cmd s3 ls s3://ver2-retail-analytics/raw/
+
+# 4. Run the full pipeline
+$env:PYTHONIOENCODING = "utf-8"
+python scripts/run_cloud_pipeline.py
+```
+
+**Run unit tests only:**
+```powershell
+python -m unittest discover -s tests
+```
+
+**Environment variables reference:**
+
+| Variable | Default | Description |
+|---|---|---|
+| `LOCAL_MODE` | `true` | `true` = read/write local files; `false` = use S3 |
+| `S3_BUCKET` | `ver2-retail-analytics` | Target S3 bucket |
+| `RAW_KEY` | `raw/DB.xlsx` | S3 key for the raw source file |
+| `CURATED_PREFIX` | `curated/` | S3 prefix for Parquet tables |
+| `OUTPUT_PREFIX` | `outputs/` | S3 prefix for ML artifacts and reports |
+| `ATHENA_DATABASE` | `retail_analytics` | Glue/Athena database name |
+| `ATHENA_WORKGROUP` | `retail_analytics_workgroup` | Athena workgroup (controls output location) |
+| `ATHENA_OUTPUT` | `s3://ver2-retail-analytics/outputs/athena/` | Athena query result location |
+| `AWS_DEFAULT_REGION` | `ap-southeast-2` | AWS region |
+| `WORK_DIR` | *(project root)* | Working directory for intermediate files |
+
+---
+
+### Cloud Evidence
+
+| Evidence | Screenshot |
+|---|---|
+| S3 data lake root | ![S3 bucket root](docs/images/cloud/s3-bucket-root.png) |
+| S3 curated Parquet layer | ![S3 curated layer](docs/images/cloud/s3-curated-layer.png) |
+| S3 fact_sales year partitions | ![S3 fact sales partitions](docs/images/cloud/s3-fact-sales-partitions.png) |
+| S3 pipeline outputs and ML artifacts | ![S3 outputs artifacts](docs/images/cloud/s3-outputs-artifacts.png) |
+| Glue Data Catalog tables | ![Glue catalog tables](docs/images/cloud/glue-catalog-tables.png) |
+| Athena fact table row count | ![Athena fact count](docs/images/cloud/athena-fact-count.png) |
+| Athena sales view query | ![Athena sales by product](docs/images/cloud/athena-sales-by-product.png) |
+| Athena retention priority view | ![Athena retention priority](docs/images/cloud/athena-retention-priority.png) |
+| GitHub Actions CI success | ![GitHub Actions success](docs/images/cloud/github-actions-success.png) |
+| Amplify public deploy | ![Amplify deploy success](docs/images/cloud/amplify-deploy-success.png) |
+| AWS Budget guardrail | ![AWS Budget guardrail](docs/images/cloud/aws-budget-guardrail.png) |
 
 Cloud module trong repo:
 
@@ -52,6 +750,15 @@ Cloud module trong repo:
 | `dbt/` | Optional dbt scaffold cho hướng Analytics Engineering trên Athena. |
 | `.github/workflows/pipeline.yml` | GitHub Actions workflow chạy cloud pipeline manual/weekly. |
 | `infra/terraform/` | Terraform scaffold cho S3, Glue, Athena, IAM. |
+
+Production hardening đã bổ sung:
+
+- `run_cloud_pipeline.py` ghi duration từng step và retry các bước AWS/Athena để chịu được lỗi network tạm thời.
+- `data_quality.py` phân biệt `ERROR` và `WARNING`, trong đó duplicate natural-grain transaction là warning còn null/FK/schema là blocking.
+- `register_glue_tables.py` fail rõ nếu curated S3 path chưa có Parquet, tránh đăng ký Glue table rỗng schema.
+- `validate_athena.py` validate thêm freshness/range checks và retry query khi Athena/SSL transient failure.
+- GitHub Actions cloud workflow chạy unit tests, build Docker image, rồi upload pipeline CSV/XLSX reports làm artifact.
+- Terraform bổ sung S3 versioning, lifecycle cleanup cho Athena outputs, backend example và quyền Glue partition cleanup.
 
 ### 1.3 ETL/ELT Design Decision
 
@@ -152,8 +859,12 @@ Cloud evidence screenshots:
 |---|---|
 | S3 data lake root | ![S3 bucket root](docs/images/cloud/s3-bucket-root.png) |
 | S3 curated Parquet layer | ![S3 curated layer](docs/images/cloud/s3-curated-layer.png) |
+| S3 fact_sales year partitions | ![S3 fact sales partitions](docs/images/cloud/s3-fact-sales-partitions.png) |
+| S3 pipeline outputs and ML artifacts | ![S3 outputs artifacts](docs/images/cloud/s3-outputs-artifacts.png) |
 | Glue Data Catalog tables | ![Glue catalog tables](docs/images/cloud/glue-catalog-tables.png) |
+| Athena fact table row count | ![Athena fact count](docs/images/cloud/athena-fact-count.png) |
 | Athena sales view query | ![Athena sales by product](docs/images/cloud/athena-sales-by-product.png) |
+| Athena retention priority view | ![Athena retention priority](docs/images/cloud/athena-retention-priority.png) |
 | GitHub Actions CI success | ![GitHub Actions success](docs/images/cloud/github-actions-success.png) |
 | Amplify public deploy | ![Amplify deploy success](docs/images/cloud/amplify-deploy-success.png) |
 | AWS Budget guardrail | ![AWS Budget guardrail](docs/images/cloud/aws-budget-guardrail.png) |
