@@ -1157,3 +1157,19 @@ Project đã hoàn thiện một quy trình phân tích dữ liệu end-to-end:
 Kết quả phân tích cho thấy doanh thu có tính mùa vụ rõ ràng, đặc biệt ở Q4 và Q1. Hai nhóm `TV and Video Gaming` và `Computers and Home Office` là growth engine chính khi đóng góp khoảng 80.2% tổng doanh thu, nhưng cũng tạo ra rủi ro tập trung danh mục. Nhóm `Bronze` là insight khách hàng đáng chú ý nhất: tuy là loyalty tier thấp, nhóm này tạo doanh thu cao nhất và có revenue/customer cao hơn nhiều tier cao hơn. Forecast `SeasonalGrowth` phù hợp để làm quarterly planning baseline, còn churn risk module nên được dùng như danh sách ưu tiên hành động theo `Expected_Revenue_At_Risk`, không nên xem là quyết định churn tuyệt đối.
 
 Về mặt hành động, doanh nghiệp nên ưu tiên tồn kho và campaign trước Q4/Q1, chăm sóc nhóm `High-Value Bronze`, chạy retention theo top-N khách hàng có revenue at risk cao nhất, và bổ sung dữ liệu discount/coupon cost/return/shipping để chuyển từ phân tích doanh thu sang tối ưu lợi nhuận thật sự.
+
+## 14. Roadmap & Future Enhancements (Enterprise Scale)
+
+Mặc dù kiến trúc hiện tại đã hoàn thiện cho cấp độ portfolio/production cơ bản (Junior-to-Mid Level), để đáp ứng quy mô Enterprise thực sự (Senior Level), hệ thống cần được nâng cấp thêm các module sau:
+
+1. **Terraform State Management (Collaboration & Safety):**
+   - *Hiện tại:* Quản lý state chủ yếu qua local backend hoặc file cấu hình mẫu.
+   - *Tương lai:* Chuyển đổi hoàn toàn sang **S3 Remote Backend kết hợp DynamoDB Lock Table**. Điều này đảm bảo tính nhất quán (consistency) khi nhiều Data Engineers cùng chạy `terraform apply` đồng thời trên CI/CD, ngăn chặn state corruption.
+
+2. **GitHub OIDC Federation thay vì IAM Access Keys (Security):**
+   - *Hiện tại:* CI/CD sử dụng dài hạn IAM User Access Keys lưu trữ trong GitHub Secrets.
+   - *Tương lai:* Nâng cấp lên **AWS IAM Identity Center (OIDC)** để cấp quyền cho GitHub Actions. Phương pháp này cho phép GitHub tự động lấy "token tạm thời" (assume role) mà không cần lưu trữ bất kỳ Secret Key cứng nào, giảm thiểu tối đa rủi ro lộ lọt credentials.
+
+3. **Data Observability & Automated Alerting (Monitoring):**
+   - *Hiện tại:* `validate_athena.py` và `data_quality.py` thực hiện kiểm tra tốt, nhưng chỉ ghi nhận log tĩnh.
+   - *Tương lai:* Tích hợp **Amazon CloudWatch Metrics** theo dõi số lượng row count, dung lượng partition và thời gian query. Bổ sung **Amazon SNS** để gửi thông báo khẩn cấp (Alerting qua Slack/Email) ngay khi phát hiện pipeline bị treo hoặc dữ liệu giảm đột biến (Data Anomaly Detection).
